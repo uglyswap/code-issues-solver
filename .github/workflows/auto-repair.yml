@@ -1,0 +1,19 @@
+name: Auto-repair
+
+on:
+  deployment_status
+
+jobs:
+  notify:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Code Issues Solver
+        run: |
+          curl -X POST http://207.180.243.246:3500/api/webhooks/github \
+            -H "Content-Type: application/json" \
+            -d '{
+              "event": "deployment_status",
+              "deployment_status": {"state": "success"},
+              "repository": {"full_name": "${{ github.repository }}"}
+            }'
