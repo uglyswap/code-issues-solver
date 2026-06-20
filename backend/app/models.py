@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 
 def now_utc():
-    return datetime.now(timezone.utc)
+    return datetime.utcnow()
 
 
 class User(Base):
@@ -165,6 +165,7 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    project_id = Column(Integer, ForeignKey("projects.id"))
     action = Column(String(255), nullable=False)
     resource_type = Column(String(100))
     resource_id = Column(Integer)
