@@ -15,14 +15,14 @@ def get_fernet() -> Fernet:
     return Fernet(key)
 
 
-def encrypt_value(value: str) -> bytes:
+def encrypt_value(value: str) -> str:
     f = get_fernet()
-    return f.encrypt(value.encode())
+    return f.encrypt(value.encode()).decode()
 
 
-def decrypt_value(encrypted: bytes) -> str:
+def decrypt_value(encrypted: str) -> str:
     f = get_fernet()
-    return f.decrypt(encrypted).decode()
+    return f.decrypt(encrypted.encode()).decode()
 
 
 def hash_password(password: str) -> str:
