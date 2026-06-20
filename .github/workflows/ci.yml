@@ -1,16 +1,12 @@
-name: CI
+from pydantic_settings import BaseSettings
+from pydantic import Field
+from typing import List
+import os
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
 
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+class Settings(BaseSettings):
+    database_url: str = Field(default="postgresql+asyncpg://app:change...n")
+    redis_url: str = Field(default="redis://localhost:***@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
