@@ -15,6 +15,7 @@ COPY backend/app ./backend/app
 COPY workers/app ./workers/app
 COPY browser/app ./browser/app
 COPY agents/app ./agents/app
+COPY agents/prompts ./agents/prompts
 COPY integrations/app ./integrations/app
 COPY db ./db
 

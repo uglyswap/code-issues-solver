@@ -14,6 +14,9 @@ from backend.app.routers import auth, projects, providers, agents, executions, t
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Seed default data (admin user, providers, agents with specialized prompts)
+    from backend.app.seed import seed
+    await seed()
     yield
     await engine.dispose()
 
