@@ -320,3 +320,56 @@ class HealthResponse(BaseModel):
 class ReadyResponse(BaseModel):
     status: str
     checks: Dict[str, str]
+
+
+# Bug Pattern schemas
+class BugPatternBase(BaseModel):
+    pattern_id: str
+    category: str
+    description: str
+    root_cause: str
+    solution_template: str
+    example_files: Optional[List[str]] = None
+    success_rate: float = 0.0
+    occurrences: int = 0
+
+
+class BugPatternCreate(BugPatternBase):
+    pass
+
+
+class BugPatternUpdate(BaseModel):
+    description: Optional[str] = None
+    root_cause: Optional[str] = None
+    solution_template: Optional[str] = None
+    example_files: Optional[List[str]] = None
+    success_rate: Optional[float] = None
+    occurrences: Optional[int] = None
+
+
+class BugPatternResponse(BugPatternBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# Successful Patch schemas
+class SuccessfulPatchBase(BaseModel):
+    category: str
+    title: str
+    description: str
+    patch_content: str
+    files_changed: Optional[List[str]] = None
+    success_rate: float = 1.0
+
+
+class SuccessfulPatchCreate(SuccessfulPatchBase):
+    ticket_id: int
+
+
+class SuccessfulPatchResponse(SuccessfulPatchBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    ticket_id: int
+    created_at: datetime
