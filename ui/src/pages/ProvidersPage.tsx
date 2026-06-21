@@ -18,19 +18,43 @@ export default function ProvidersPage() {
   const providers: AIProvider[] = data?.items || []
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold">AI Providers</h1>
         <button onClick={() => { setShowForm(true); setEditing(null); setForm({ enabled: true, priority: 1, models: {} }) }} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"><Plus className="w-4 h-4" /> New Provider</button>
+      </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <p className="text-sm text-blue-900">
+          <strong>Qu'est-ce qu'un AI Provider ?</strong> Un provider configure un service d'IA (OpenRouter, Alibaba, etc.) 
+          avec sa clé API. Les agents IA utilisent ces providers pour générer des patches, analyser les bugs, etc.
+        </p>
+        <div className="mt-2 text-xs text-blue-700">
+          <strong>Exemple :</strong> OpenRouter avec l'API key sk-or-... et la base URL https://openrouter.ai/api/v1
+        </div>
       </div>
       {(showForm || editing) && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 space-y-4">
           <h2 className="font-semibold text-lg">{editing ? 'Edit Provider' : 'New Provider'}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input placeholder="Name" required className="border rounded-lg px-3 py-2" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <input placeholder="Base URL" required className="border rounded-lg px-3 py-2" value={String(form.base_url || '')} onChange={(e) => setForm({ ...form, base_url: e.target.value })} />
-            <input placeholder="API Key" required type="password" className="border rounded-lg px-3 py-2" value={String(form.api_key || '')} onChange={(e) => setForm({ ...form, api_key: e.target.value })} />
-            <input placeholder="Priority" type="number" className="border rounded-lg px-3 py-2" value={String(form.priority || 1)} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })} />
-            <input placeholder='{"default":"gpt-4"}' className="border rounded-lg px-3 py-2" value={typeof form.models === 'string' ? form.models : JSON.stringify(form.models)} onChange={(e) => setForm({ ...form, models: e.target.value })} />
+            <div>
+              <input placeholder="Name" required className="border rounded-lg px-3 py-2 w-full" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Nom du provider (ex: "openrouter", "alibaba")</p>
+            </div>
+            <div>
+              <input placeholder="Base URL" required className="border rounded-lg px-3 py-2 w-full" value={String(form.base_url || '')} onChange={(e) => setForm({ ...form, base_url: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">URL de l'API (ex: https://openrouter.ai/api/v1)</p>
+            </div>
+            <div>
+              <input placeholder="API Key" required type="password" className="border rounded-lg px-3 py-2 w-full" value={String(form.api_key || '')} onChange={(e) => setForm({ ...form, api_key: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Clé API du provider (chiffrée en base)</p>
+            </div>
+            <div>
+              <input placeholder="Priority" type="number" className="border rounded-lg px-3 py-2 w-full" value={String(form.priority || 1)} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })} />
+              <p className="text-xs text-slate-500 mt-1">Priorité (1 = plus haute, utilisé si plusieurs providers)</p>
+            </div>
+            <div>
+              <input placeholder='{"default":"gpt-4"}' className="border rounded-lg px-3 py-2 w-full" value={typeof form.models === 'string' ? form.models : JSON.stringify(form.models)} onChange={(e) => setForm({ ...form, models: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Modèles disponibles en JSON (ex: {"{"}"default":"anthropic/claude-3.5-sonnet"{"}"})</p>
+            </div>
             <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enabled</label>
           </div>
           <div className="flex gap-2">

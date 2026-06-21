@@ -21,21 +21,39 @@ export default function SecretsPage() {
   const projects: Project[] = projectsData?.items || []
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold">Secrets</h1>
         <div className="flex gap-2">
           <select className="border rounded-lg px-3 py-2" value={projectId} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : '')}><option value="">Select Project</option>{projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
           <button onClick={() => { setShowForm(true); setEditing(null); setForm({}) }} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"><Plus className="w-4 h-4" /> New Secret</button>
         </div>
       </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <p className="text-sm text-blue-900">
+          <strong>Qu'est-ce qu'un Secret ?</strong> Un secret est une variable d'environnement chiffrée associée à un projet. 
+          Utilisez-les pour stocker des tokens API, des credentials, ou toute donnée sensible dont vos agents ont besoin.
+        </p>
+        <div className="mt-2 text-xs text-blue-700">
+          Les secrets sont chiffrés avec Fernet avant d'être stockés en base. Ils ne sont jamais affichés en clair.
+        </div>
+      </div>
       {(showForm || editing) && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 space-y-4">
           <h2 className="font-semibold text-lg">{editing ? 'Edit Secret' : 'New Secret'}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input placeholder="Name" required className="border rounded-lg px-3 py-2" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <input placeholder="Value" required type="password" className="border rounded-lg px-3 py-2" value={String(form.value || '')} onChange={(e) => setForm({ ...form, value: e.target.value })} />
+            <div>
+              <input placeholder="Name" required className="border rounded-lg px-3 py-2 w-full" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Nom du secret (ex: "GITHUB_TOKEN", "API_KEY")</p>
+            </div>
+            <div>
+              <input placeholder="Value" required type="password" className="border rounded-lg px-3 py-2 w-full" value={String(form.value || '')} onChange={(e) => setForm({ ...form, value: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Valeur du secret (chiffrée automatiquement)</p>
+            </div>
           </div>
-          <textarea placeholder="Description" className="w-full border rounded-lg px-3 py-2" value={String(form.description || '')} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <div>
+            <textarea placeholder="Description" className="w-full border rounded-lg px-3 py-2" value={String(form.description || '')} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <p className="text-xs text-slate-500 mt-1">Description optionnelle (ex: "Token GitHub pour créer des issues")</p>
+          </div>
           <div className="flex gap-2">
             <button type="submit" className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">{editing ? 'Update' : 'Create'}</button>
             <button type="button" onClick={() => { setShowForm(false); setEditing(null) }} className="px-4 py-2 rounded-lg border">Cancel</button>

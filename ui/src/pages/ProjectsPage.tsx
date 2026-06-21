@@ -23,23 +23,60 @@ export default function ProjectsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold">Projects</h1>
         <button onClick={() => { setShowForm(true); setEditing(null); setForm({ enabled: true }) }} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"><Plus className="w-4 h-4" /> New Project</button>
+      </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <p className="text-sm text-blue-900">
+          <strong>Qu'est-ce qu'un projet ?</strong> Un projet configure une application web à tester automatiquement. 
+          Le système lance Playwright pour détecter les bugs, crée des GitHub Issues, génère des patches via les agents IA, 
+          ouvre des Pull Requests, et redéploie jusqu'à ce que tout fonctionne.
+        </p>
+        <div className="mt-2 text-xs text-blue-700">
+          <strong>Champs requis :</strong> URL de l'app, repo GitHub (owner + name), token GitHub avec permissions issues/PRs.
+        </div>
       </div>
       {(showForm || editing) && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 space-y-4">
           <h2 className="font-semibold text-lg">{editing ? 'Edit Project' : 'New Project'}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input placeholder="Name" required className="border rounded-lg px-3 py-2" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <input placeholder="App URL" required className="border rounded-lg px-3 py-2" value={String(form.app_url || '')} onChange={(e) => setForm({ ...form, app_url: e.target.value })} />
-            <input placeholder="GitHub Owner" required className="border rounded-lg px-3 py-2" value={String(form.github_repo_owner || '')} onChange={(e) => setForm({ ...form, github_repo_owner: e.target.value })} />
-            <input placeholder="GitHub Repo" required className="border rounded-lg px-3 py-2" value={String(form.github_repo_name || '')} onChange={(e) => setForm({ ...form, github_repo_name: e.target.value })} />
-            <input placeholder="App Username" className="border rounded-lg px-3 py-2" value={String(form.app_username || '')} onChange={(e) => setForm({ ...form, app_username: e.target.value })} />
-            <input placeholder="App Password" type="password" className="border rounded-lg px-3 py-2" value={String(form.app_password || '')} onChange={(e) => setForm({ ...form, app_password: e.target.value })} />
-            <input placeholder="GitHub Token" type="password" className="border rounded-lg px-3 py-2" value={String(form.github_token || '')} onChange={(e) => setForm({ ...form, github_token: e.target.value })} />
-            <input placeholder="Deploy Webhook URL" className="border rounded-lg px-3 py-2" value={String(form.deploy_webhook_url || '')} onChange={(e) => setForm({ ...form, deploy_webhook_url: e.target.value })} />
-            <input placeholder="Schedule Cron" className="border rounded-lg px-3 py-2" value={String(form.schedule_cron || '')} onChange={(e) => setForm({ ...form, schedule_cron: e.target.value })} />
+            <div>
+              <input placeholder="Name" required className="border rounded-lg px-3 py-2 w-full" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Nom du projet (ex: "Mon Application")</p>
+            </div>
+            <div>
+              <input placeholder="App URL" required className="border rounded-lg px-3 py-2 w-full" value={String(form.app_url || '')} onChange={(e) => setForm({ ...form, app_url: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">URL de l'application à tester (ex: https://monapp.com)</p>
+            </div>
+            <div>
+              <input placeholder="GitHub Owner" required className="border rounded-lg px-3 py-2 w-full" value={String(form.github_repo_owner || '')} onChange={(e) => setForm({ ...form, github_repo_owner: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Propriétaire du repo GitHub (ex: "uglyswap")</p>
+            </div>
+            <div>
+              <input placeholder="GitHub Repo" required className="border rounded-lg px-3 py-2 w-full" value={String(form.github_repo_name || '')} onChange={(e) => setForm({ ...form, github_repo_name: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Nom du repo GitHub à corriger (ex: "code-issues-solver")</p>
+            </div>
+            <div>
+              <input placeholder="App Username" className="border rounded-lg px-3 py-2 w-full" value={String(form.app_username || '')} onChange={(e) => setForm({ ...form, app_username: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Username pour se connecter à l'app (optionnel)</p>
+            </div>
+            <div>
+              <input placeholder="App Password" type="password" className="border rounded-lg px-3 py-2 w-full" value={String(form.app_password || '')} onChange={(e) => setForm({ ...form, app_password: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Password pour se connecter à l'app (optionnel)</p>
+            </div>
+            <div>
+              <input placeholder="GitHub Token" type="password" className="border rounded-lg px-3 py-2 w-full" value={String(form.github_token || '')} onChange={(e) => setForm({ ...form, github_token: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Token GitHub avec permissions repo, issues, pull requests</p>
+            </div>
+            <div>
+              <input placeholder="Deploy Webhook URL" className="border rounded-lg px-3 py-2 w-full" value={String(form.deploy_webhook_url || '')} onChange={(e) => setForm({ ...form, deploy_webhook_url: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">URL webhook pour déclencher le déploiement après merge PR (optionnel)</p>
+            </div>
+            <div>
+              <input placeholder="Schedule Cron" className="border rounded-lg px-3 py-2 w-full" value={String(form.schedule_cron || '')} onChange={(e) => setForm({ ...form, schedule_cron: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Expression cron pour exécution automatique (ex: "0 2 * * *" = chaque jour à 2h)</p>
+            </div>
             <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enabled</label>
           </div>
           <textarea placeholder="Description" className="w-full border rounded-lg px-3 py-2" value={String(form.description || '')} onChange={(e) => setForm({ ...form, description: e.target.value })} />

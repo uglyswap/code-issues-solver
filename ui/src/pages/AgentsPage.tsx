@@ -20,26 +20,57 @@ export default function AgentsPage() {
   const providers = providersData?.items || []
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold">Agents</h1>
         <button onClick={() => { setShowForm(true); setEditing(null); setForm({ enabled: true, temperature: 0.7, max_tokens: 4000 }) }} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"><Plus className="w-4 h-4" /> New Agent</button>
+      </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <p className="text-sm text-blue-900">
+          <strong>Qu'est-ce qu'un Agent ?</strong> Un agent IA spécialisé dans une tâche du workflow de correction automatique. 
+          5 agents sont créés par défaut : <strong>tester</strong> (détecte les bugs), <strong>triage</strong> (classifie), 
+          <strong>coder</strong> (génère les patches), <strong>reviewer</strong> (vérifie la qualité), <strong>verifier</strong> (valide post-déploiement).
+        </p>
+        <div className="mt-2 text-xs text-blue-700">
+          Chaque agent a un prompt spécialisé, un modèle IA, et une température adaptée à sa tâche.
+        </div>
       </div>
       {(showForm || editing) && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 space-y-4">
           <h2 className="font-semibold text-lg">{editing ? 'Edit Agent' : 'New Agent'}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input placeholder="Name" required className="border rounded-lg px-3 py-2" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <input placeholder="Model" required className="border rounded-lg px-3 py-2" value={String(form.model || '')} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-            <input placeholder="Temperature" type="number" step="0.1" className="border rounded-lg px-3 py-2" value={String(form.temperature ?? 0.7)} onChange={(e) => setForm({ ...form, temperature: Number(e.target.value) })} />
-            <input placeholder="Max Tokens" type="number" className="border rounded-lg px-3 py-2" value={String(form.max_tokens ?? 4000)} onChange={(e) => setForm({ ...form, max_tokens: Number(e.target.value) })} />
-            <select className="border rounded-lg px-3 py-2" value={String(form.provider_id || '')} onChange={(e) => setForm({ ...form, provider_id: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">Select Provider</option>
-              {providers.map((p: any) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-            </select>
+            <div>
+              <input placeholder="Name" required className="border rounded-lg px-3 py-2 w-full" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Nom de l'agent (ex: "tester", "coder")</p>
+            </div>
+            <div>
+              <input placeholder="Model" required className="border rounded-lg px-3 py-2 w-full" value={String(form.model || '')} onChange={(e) => setForm({ ...form, model: e.target.value })} />
+              <p className="text-xs text-slate-500 mt-1">Modèle IA (ex: "anthropic/claude-3.5-sonnet")</p>
+            </div>
+            <div>
+              <input placeholder="Temperature" type="number" step="0.1" className="border rounded-lg px-3 py-2 w-full" value={String(form.temperature ?? 0.7)} onChange={(e) => setForm({ ...form, temperature: Number(e.target.value) })} />
+              <p className="text-xs text-slate-500 mt-1">Température (0.1 = précis, 0.7 = créatif)</p>
+            </div>
+            <div>
+              <input placeholder="Max Tokens" type="number" className="border rounded-lg px-3 py-2 w-full" value={String(form.max_tokens ?? 4000)} onChange={(e) => setForm({ ...form, max_tokens: Number(e.target.value) })} />
+              <p className="text-xs text-slate-500 mt-1">Tokens max (8000 recommandé pour Claude)</p>
+            </div>
+            <div>
+              <select className="border rounded-lg px-3 py-2 w-full" value={String(form.provider_id || '')} onChange={(e) => setForm({ ...form, provider_id: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">Select Provider</option>
+                {providers.map((p: any) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">Provider IA à utiliser (OpenRouter, Alibaba, etc.)</p>
+            </div>
             <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enabled</label>
           </div>
-          <textarea placeholder="System Prompt Template (Jinja2)" required rows={6} className="w-full border rounded-lg px-3 py-2 font-mono text-sm" value={String(form.system_prompt_template || '')} onChange={(e) => setForm({ ...form, system_prompt_template: e.target.value })} />
-          <textarea placeholder="Description" className="w-full border rounded-lg px-3 py-2" value={String(form.description || '')} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <div>
+            <textarea placeholder="System Prompt Template (Jinja2)" required rows={6} className="w-full border rounded-lg px-3 py-2 font-mono text-sm" value={String(form.system_prompt_template || '')} onChange={(e) => setForm({ ...form, system_prompt_template: e.target.value })} />
+            <p className="text-xs text-slate-500 mt-1">Prompt système de l'agent (supporte les variables Jinja2 comme {"{{"}bug_description{"}}"})</p>
+          </div>
+          <div>
+            <textarea placeholder="Description" className="w-full border rounded-lg px-3 py-2" value={String(form.description || '')} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <p className="text-xs text-slate-500 mt-1">Description du rôle de l'agent</p>
+          </div>
           <div className="flex gap-2">
             <button type="submit" className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">{editing ? 'Update' : 'Create'}</button>
             <button type="button" onClick={() => { setShowForm(false); setEditing(null) }} className="px-4 py-2 rounded-lg border">Cancel</button>
