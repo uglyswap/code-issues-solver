@@ -53,7 +53,7 @@ async def seed():
                     "prompt_file": "triage.md",
                     "model": "anthropic/claude-3.5-sonnet",
                     "temperature": 0.2,
-                    "max_tokens": 6000,
+                    "max_tokens": 8000,
                 },
                 {
                     "name": "coder",
@@ -61,7 +61,7 @@ async def seed():
                     "prompt_file": "coder.md",
                     "model": "anthropic/claude-3.5-sonnet",
                     "temperature": 0.1,
-                    "max_tokens": 12000,
+                    "max_tokens": 8000,
                 },
                 {
                     "name": "reviewer",
@@ -69,7 +69,7 @@ async def seed():
                     "prompt_file": "reviewer.md",
                     "model": "anthropic/claude-3.5-sonnet",
                     "temperature": 0.2,
-                    "max_tokens": 6000,
+                    "max_tokens": 8000,
                 },
                 {
                     "name": "verifier",
