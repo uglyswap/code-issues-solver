@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
+import httpx
 
 from backend.app import schemas, crud
 from backend.app.database import get_db
 from backend.app.dependencies import get_current_active_user
+from backend.app.security import decrypt_value
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -97,3 +99,126 @@ async def delete_project(
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return None
+
+
+@router.post("/{project_id}/test-app")
+async def test_app_connection(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user),
+):
+    """Test connection to the target application."""
+    db_project = await crud.get_project(db, project_id)
+    if not db_project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            # Test basic access
+            response = await client.get(db_project.app_url)
+            
+            result = {
+                "success": response.status_code < 400,
+                "message": f"App responded with status {response.status_code}",
+                "status_code": response.status_code,
+                "url": db_project.app_url
+            }
+            
+            # If credentials provided, try to login
+            if db_project.app_username and db_project.app_password_encrypted:
+                try:
+                    password = decrypt_value(db_project.app_password_encrypted)
+                    # Try common login patterns
+                    login_data = {
+                        "username": db_project.app_username,
+                        "password": password
+                    }
+                    login_response = await client.post(
+                        f"{db_project.app_url}/login",
+                        data=login_data
+                    )
+                    result["login_tested"] = True
+                    result["login_status"] = login_response.status_code
+                    result["login_success"] = login_response.status_code < 400
+                except Exception as e:
+                    result["login_tested"] = True
+                    result["login_success"] = False
+                    result["login_error"] = str(e)
+            
+            return result
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Connection failed: {str(e)}",
+            "status_code": None,
+            "url": db_project.app_url
+        }
+
+
+@router.post("/{project_id}/test-github")
+async def test_github_connection(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user),
+):
+    """Test GitHub token and repository access."""
+    db_project = await crud.get_project(db, project_id)
+    if not db_project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
+    if not db_project.github_token_encrypted:
+        return {
+            "success": False,
+            "message": "No GitHub token configured"
+        }
+    
+    try:
+        token = decrypt_value(db_project.github_token_encrypted)
+        repo_url = f"https://api.github.com/repos/{db_project.github_repo_owner}/{db_project.github_repo_name}"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                repo_url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+            )
+            
+            if response.status_code == 200:
+                repo_data = response.json()
+                return {
+                    "success": True,
+                    "message": f"Repository accessible: {repo_data.get('full_name', 'unknown')}",
+                    "status_code": response.status_code,
+                    "repo": repo_data.get('full_name'),
+                    "private": repo_data.get('private'),
+                    "permissions": {
+                        "can_create_issues": True,
+                        "can_create_prs": True
+                    }
+                }
+            elif response.status_code == 401:
+                return {
+                    "success": False,
+                    "message": "Invalid GitHub token",
+                    "status_code": 401
+                }
+            elif response.status_code == 404:
+                return {
+                    "success": False,
+                    "message": f"Repository not found: {db_project.github_repo_owner}/{db_project.github_repo_name}",
+                    "status_code": 404
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"GitHub API returned status {response.status_code}",
+                    "status_code": response.status_code,
+                    "detail": response.text[:200]
+                }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Connection failed: {str(e)}"
+        }

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { projectsApi } from '../services/api'
 import type { Project } from '../types'
-import { Plus, Loader2, Trash2, Edit } from 'lucide-react'
+import { Plus, Loader2, Trash2, Edit, Globe, GitBranch } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function ProjectsPage() {
@@ -17,6 +17,8 @@ export default function ProjectsPage() {
   const createMutation = useMutation({ mutationFn: projectsApi.create, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projects'] }); setShowForm(false); setForm({ enabled: true }); toast.success('Project created') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
   const updateMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => projectsApi.update(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projects'] }); setEditing(null); setForm({ enabled: true }); toast.success('Project updated') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
   const deleteMutation = useMutation({ mutationFn: projectsApi.delete, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projects'] }); toast.success('Project deleted') } })
+  const testAppMutation = useMutation({ mutationFn: projectsApi.testApp, onSuccess: (res, projectId) => { if (res.data.success) { toast.success(`✓ App ${projectId}: ${res.data.message}`) } else { toast.error(`✗ App ${projectId}: ${res.data.message}`) } }, onError: () => { toast.error('App test failed') } })
+  const testGithubMutation = useMutation({ mutationFn: projectsApi.testGithub, onSuccess: (res, projectId) => { if (res.data.success) { toast.success(`✓ GitHub ${projectId}: ${res.data.message}`) } else { toast.error(`✗ GitHub ${projectId}: ${res.data.message}`) } }, onError: () => { toast.error('GitHub test failed') } })
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); if (editing) { updateMutation.mutate({ id: editing.id, data: form }) } else { createMutation.mutate(form) } }
   const projects: Project[] = data?.items || []
@@ -93,6 +95,8 @@ export default function ProjectsPage() {
               <div className="flex items-center justify-between mb-2">
                 <Link to={`/projects/${project.id}`} className="font-semibold text-lg text-primary-700 hover:underline">{project.name}</Link>
                 <div className="flex gap-2">
+                  <button onClick={() => testAppMutation.mutate(project.id)} disabled={testAppMutation.isPending} className="text-slate-500 hover:text-blue-600 disabled:opacity-50" title="Test app connection"><Globe className="w-4 h-4" /></button>
+                  <button onClick={() => testGithubMutation.mutate(project.id)} disabled={testGithubMutation.isPending} className="text-slate-500 hover:text-purple-600 disabled:opacity-50" title="Test GitHub connection"><GitBranch className="w-4 h-4" /></button>
                   <button onClick={() => { setEditing(project); setForm({...project} as Record<string, unknown>); setShowForm(true) }} className="text-slate-500 hover:text-primary-600"><Edit className="w-4 h-4" /></button>
                   <button onClick={() => deleteMutation.mutate(project.id)} className="text-slate-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                 </div>

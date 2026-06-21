@@ -45,6 +45,8 @@ export const projectsApi = {
   create: (data: Record<string, unknown>) => api.post('/api/projects', data),
   update: (id: number, data: Record<string, unknown>) => api.put(`/api/projects/${id}`, data),
   delete: (id: number) => api.delete(`/api/projects/${id}`),
+  testApp: (id: number) => api.post(`/api/projects/${id}/test-app`),
+  testGithub: (id: number) => api.post(`/api/projects/${id}/test-github`),
 }
 
 export const providersApi = {
@@ -53,6 +55,7 @@ export const providersApi = {
   create: (data: Record<string, unknown>) => api.post('/api/providers', data),
   update: (id: number, data: Record<string, unknown>) => api.put(`/api/providers/${id}`, data),
   delete: (id: number) => api.delete(`/api/providers/${id}`),
+  test: (id: number) => api.post(`/api/providers/${id}/test`),
 }
 
 export const agentsApi = {

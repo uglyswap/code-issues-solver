@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import httpx
 
 from backend.app import schemas, crud
 from backend.app.database import get_db
 from backend.app.dependencies import get_current_active_user
+from backend.app.security import decrypt_value
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
@@ -65,3 +67,48 @@ async def delete_provider(
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
     return None
+
+
+@router.post("/{provider_id}/test")
+async def test_provider(
+    provider_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user),
+):
+    """Test the connection to an AI provider."""
+    db_provider = await crud.get_ai_provider(db, provider_id)
+    if not db_provider:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+    
+    try:
+        # Decrypt API key
+        api_key = decrypt_value(db_provider.api_key_encrypted)
+        
+        # Test connection by calling /models or / endpoint
+        test_url = f"{db_provider.base_url.rstrip('/')}/models"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                test_url,
+                headers={"Authorization": f"Bearer {api_key}"}
+            )
+            
+            if response.status_code == 200:
+                return {
+                    "success": True,
+                    "message": "Connection successful",
+                    "status_code": response.status_code
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"API returned status {response.status_code}",
+                    "status_code": response.status_code,
+                    "detail": response.text[:200]
+                }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Connection failed: {str(e)}",
+            "status_code": None
+        }

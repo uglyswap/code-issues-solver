@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { providersApi } from '../services/api'
 import type { AIProvider } from '../types'
-import { Plus, Trash2, Edit, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Edit, Loader2, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function ProvidersPage() {
@@ -14,6 +14,7 @@ export default function ProvidersPage() {
   const createMutation = useMutation({ mutationFn: providersApi.create, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); setShowForm(false); setForm({ enabled: true, priority: 1, models: {} }); toast.success('Provider created') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
   const updateMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => providersApi.update(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); setEditing(null); toast.success('Provider updated') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
   const deleteMutation = useMutation({ mutationFn: providersApi.delete, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success('Provider deleted') } })
+  const testMutation = useMutation({ mutationFn: providersApi.test, onSuccess: (res) => { if (res.data.success) { toast.success('✓ ' + res.data.message) } else { toast.error('✗ ' + res.data.message) } }, onError: () => { toast.error('Test failed') } })
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); const payload = { ...form }; if (typeof payload.models === 'string') { try { payload.models = JSON.parse(payload.models) } catch {} } if (editing) { updateMutation.mutate({ id: editing.id, data: payload }) } else { createMutation.mutate(payload) } }
   const providers: AIProvider[] = data?.items || []
   return (
@@ -70,6 +71,7 @@ export default function ProvidersPage() {
               <div className="flex items-center justify-between mb-2">
                 <div className="font-semibold">{p.name}</div>
                 <div className="flex gap-2">
+                  <button onClick={() => testMutation.mutate(p.id)} disabled={testMutation.isPending} className="text-slate-500 hover:text-green-600 disabled:opacity-50" title="Test connection"><Zap className="w-4 h-4" /></button>
                   <button onClick={() => { setEditing(p); setForm({ ...p, models: JSON.stringify(p.models) }); setShowForm(true) }} className="text-slate-500 hover:text-primary-600"><Edit className="w-4 h-4" /></button>
                   <button onClick={() => deleteMutation.mutate(p.id)} className="text-slate-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                 </div>
