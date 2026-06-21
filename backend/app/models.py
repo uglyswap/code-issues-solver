@@ -176,3 +176,35 @@ class AuditLog(Base):
 
     user = relationship("User", back_populates="audit_logs")
     project = relationship("Project", back_populates="audit_logs")
+
+
+class BugPattern(Base):
+    __tablename__ = "bug_patterns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pattern_id = Column(String(255), unique=True, nullable=False, index=True)
+    category = Column(String(100), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    root_cause = Column(Text, nullable=False)
+    solution_template = Column(Text, nullable=False)
+    example_files = Column(JSON, default=list)
+    success_rate = Column(Float, default=0.0)
+    occurrences = Column(Integer, default=0)
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class SuccessfulPatch(Base):
+    __tablename__ = "successful_patches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    category = Column(String(100), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=False)
+    patch_content = Column(Text, nullable=False)
+    files_changed = Column(JSON, default=list)
+    success_rate = Column(Float, default=1.0)
+    created_at = Column(DateTime, default=now_utc)
+
+    ticket = relationship("Ticket")
