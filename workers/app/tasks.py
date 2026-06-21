@@ -295,6 +295,33 @@ async def _generate_patch_async(ticket_id: int, attempt: int = 1, feedback: str 
             if feedback:
                 bug_description = f"{ticket.description}\n\n{feedback}"
             
+            # IMPROVEMENT 4: Knowledge base - inject similar patterns and examples
+            similar_patterns = await crud.get_bug_patterns(db, skip=0, limit=3, category=ticket.category)
+            similar_patches = await crud.get_successful_patches(db, skip=0, limit=3, category=ticket.category)
+            
+            if similar_patterns or similar_patches:
+                knowledge_context = "\n\n## KNOWLEDGE BASE - Similar patterns and successful patches\n\n"
+                
+                if similar_patterns:
+                    knowledge_context += "### Known patterns for this category:\n"
+                    for pattern in similar_patterns[:3]:
+                        knowledge_context += f"\n**Pattern: {pattern.pattern_id}**\n"
+                        knowledge_context += f"- Description: {pattern.description}\n"
+                        knowledge_context += f"- Root cause: {pattern.root_cause}\n"
+                        knowledge_context += f"- Solution: {pattern.solution_template}\n"
+                        knowledge_context += f"- Success rate: {pattern.success_rate:.0%} ({pattern.occurrences} occurrences)\n"
+                
+                if similar_patches:
+                    knowledge_context += "\n### Successful patches for this category:\n"
+                    for patch in similar_patches[:3]:
+                        knowledge_context += f"\n**Patch for: {patch.title}**\n"
+                        knowledge_context += f"- Description: {patch.description}\n"
+                        knowledge_context += f"- Files changed: {', '.join(patch.files_changed) if patch.files_changed else 'N/A'}\n"
+                        knowledge_context += f"- Success rate: {patch.success_rate:.0%}\n"
+                
+                bug_description += knowledge_context
+                await _log(execution.id, "info", f"Injected {len(similar_patterns)} patterns and {len(similar_patches)} examples")
+            
             # Generate patch with coder agent
             agent = await get_agent_by_name(db, "coder")
             patch_text = await agent.run({
@@ -658,6 +685,32 @@ async def _verify_fix_async(ticket_id: int):
                     await client.close()
             execution.total_bugs_fixed = (execution.total_bugs_fixed or 0) + 1
             await db.flush()
+            
+            # IMPROVEMENT 5: Store successful patch in knowledge base
+            if ticket.patch_content:
+                try:
+                    # Extract files changed from patch content (simple heuristic)
+                    files_changed = []
+                    for line in ticket.patch_content.split('\n'):
+                        if line.startswith('+++ b/'):
+                            files_changed.append(line[6:])
+                    
+                    await crud.create_successful_patch(
+                        db,
+                        schemas.SuccessfulPatchCreate(
+                            ticket_id=ticket.id,
+                            category=ticket.category,
+                            title=ticket.title,
+                            description=ticket.description,
+                            patch_content=ticket.patch_content,
+                            files_changed=files_changed,
+                            success_rate=1.0,
+                        )
+                    )
+                    await db.flush()
+                    await _log(execution.id, "info", f"Stored successful patch for ticket {ticket_id} in knowledge base")
+                except Exception as e:
+                    await _log(execution.id, "warning", f"Failed to store successful patch: {e}")
         else:
             if ticket.retry_count < ticket.max_retries:
                 ticket.status = "open"
