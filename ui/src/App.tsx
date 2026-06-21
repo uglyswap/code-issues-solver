@@ -1,6 +1,5 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { useEffect } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
@@ -16,14 +15,6 @@ import SecretsPage from './pages/SecretsPage'
 
 function App() {
   const { user, isLoading } = useAuth()
-  const navigate = useNavigate()
-
-  // Redirect to /projects once user becomes authenticated
-  useEffect(() => {
-    if (!isLoading && user) {
-      navigate('/projects', { replace: true })
-    }
-  }, [user, isLoading, navigate])
 
   if (isLoading) {
     return (
