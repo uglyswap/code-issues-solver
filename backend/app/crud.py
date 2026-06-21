@@ -469,3 +469,101 @@ async def create_audit_log(db: AsyncSession, log: schemas.AuditLogBase, user_id:
     await db.flush()
     await db.refresh(db_log)
     return db_log
+
+
+# Bug Pattern CRUD
+async def get_bug_patterns(db: AsyncSession, skip: int = 0, limit: int = 20, category: Optional[str] = None):
+    query = select(models.BugPattern)
+    if category:
+        query = query.where(models.BugPattern.category == category)
+    query = query.order_by(desc(models.BugPattern.occurrences)).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+async def get_bug_pattern(db: AsyncSession, pattern_id: int) -> Optional[models.BugPattern]:
+    result = await db.execute(select(models.BugPattern).where(models.BugPattern.id == pattern_id))
+    return result.scalar_one_or_none()
+
+
+async def get_bug_pattern_by_pattern_id(db: AsyncSession, pattern_id: str) -> Optional[models.BugPattern]:
+    result = await db.execute(select(models.BugPattern).where(models.BugPattern.pattern_id == pattern_id))
+    return result.scalar_one_or_none()
+
+
+async def create_bug_pattern(db: AsyncSession, pattern: schemas.BugPatternCreate) -> models.BugPattern:
+    db_pattern = models.BugPattern(
+        pattern_id=pattern.pattern_id,
+        category=pattern.category,
+        description=pattern.description,
+        root_cause=pattern.root_cause,
+        solution_template=pattern.solution_template,
+        example_files=pattern.example_files or [],
+        success_rate=pattern.success_rate,
+        occurrences=pattern.occurrences,
+    )
+    db.add(db_pattern)
+    await db.flush()
+    await db.refresh(db_pattern)
+    return db_pattern
+
+
+async def update_bug_pattern(db: AsyncSession, pattern_id: int, pattern: schemas.BugPatternUpdate) -> Optional[models.BugPattern]:
+    db_pattern = await get_bug_pattern(db, pattern_id)
+    if not db_pattern:
+        return None
+    data = pattern.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(db_pattern, key, value)
+    await db.flush()
+    await db.refresh(db_pattern)
+    return db_pattern
+
+
+async def delete_bug_pattern(db: AsyncSession, pattern_id: int) -> bool:
+    db_pattern = await get_bug_pattern(db, pattern_id)
+    if not db_pattern:
+        return False
+    await db.delete(db_pattern)
+    await db.flush()
+    return True
+
+
+# Successful Patch CRUD
+async def get_successful_patches(db: AsyncSession, skip: int = 0, limit: int = 20, category: Optional[str] = None):
+    query = select(models.SuccessfulPatch)
+    if category:
+        query = query.where(models.SuccessfulPatch.category == category)
+    query = query.order_by(desc(models.SuccessfulPatch.created_at)).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+async def get_successful_patch(db: AsyncSession, patch_id: int) -> Optional[models.SuccessfulPatch]:
+    result = await db.execute(select(models.SuccessfulPatch).where(models.SuccessfulPatch.id == patch_id))
+    return result.scalar_one_or_none()
+
+
+async def create_successful_patch(db: AsyncSession, patch: schemas.SuccessfulPatchCreate) -> models.SuccessfulPatch:
+    db_patch = models.SuccessfulPatch(
+        ticket_id=patch.ticket_id,
+        category=patch.category,
+        title=patch.title,
+        description=patch.description,
+        patch_content=patch.patch_content,
+        files_changed=patch.files_changed or [],
+        success_rate=patch.success_rate,
+    )
+    db.add(db_patch)
+    await db.flush()
+    await db.refresh(db_patch)
+    return db_patch
+
+
+async def delete_successful_patch(db: AsyncSession, patch_id: int) -> bool:
+    db_patch = await get_successful_patch(db, patch_id)
+    if not db_patch:
+        return False
+    await db.delete(db_patch)
+    await db.flush()
+    return True
