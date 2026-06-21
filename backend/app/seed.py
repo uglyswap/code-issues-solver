@@ -11,6 +11,7 @@ async def seed():
         user = await crud.get_user_by_username(db, "admin")
         if not user:
             await crud.create_user(db, schemas.UserCreate(username="admin", email="admin@local", password="admin1234"))
+            await db.commit()
             print("Created admin user (admin / admin1234)")
 
         # Create default providers if none exist
@@ -26,6 +27,7 @@ async def seed():
                     priority=1,
                 ),
             )
+            await db.commit()
             print("Created default OpenRouter provider")
 
         # Create default agents if none exist
@@ -99,6 +101,7 @@ async def seed():
                         max_tokens=config["max_tokens"],
                     ),
                 )
+            await db.commit()
             print("Created 5 default agents with specialized prompts (tester, triage, coder, reviewer, verifier)")
 
 
