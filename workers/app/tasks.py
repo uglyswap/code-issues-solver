@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict
 
 import dramatiq
 from dramatiq import middleware
@@ -225,16 +225,24 @@ async def _create_github_issue_async(ticket_id: int):
 
 
 @dramatiq.actor
-def generate_patch(ticket_id: int):
-    asyncio.run(_generate_patch_async(ticket_id))
+def generate_patch(ticket_id: int, attempt: int = 1, feedback: str = ""):
+    """Generate a patch with enriched context and feedback loop."""
+    asyncio.run(_generate_patch_async(ticket_id, attempt, feedback))
 
 
-async def _generate_patch_async(ticket_id: int):
+async def _generate_patch_async(ticket_id: int, attempt: int = 1, feedback: str = ""):
+    """
+    Generate patch with 3 improvements:
+    1. Enriched context (automatic dependency analysis)
+    2. Feedback loop (structured feedback from reviewer)
+    3. Automatic tests before review
+    """
     async with get_db() as db:
         ticket = await crud.get_ticket(db, ticket_id)
         if not ticket:
             return
         ticket.status = "patching"
+        ticket.retry_count = attempt - 1  # retry_count starts at 0, attempt starts at 1
         await db.flush()
 
         execution = await crud.get_execution(db, ticket.execution_id)
@@ -247,9 +255,12 @@ async def _generate_patch_async(ticket_id: int):
         token = decrypt_value(project.github_token_encrypted)
         client = GitHubClient(token)
         try:
-            # Gather some repo files for context (heuristic: list root and src)
-            code_files = []
-            for path in ["", "src"]:
+            await _log(execution.id, "info", f"Generating patch (attempt {attempt}/3)")
+            
+            # IMPROVEMENT 3: Enriched context
+            # Gather all repo files
+            all_repo_files = []
+            for path in ["", "src", "backend", "frontend", "lib", "app"]:
                 try:
                     files = await client.list_repo_files(project.github_repo_owner, project.github_repo_name, path)
                     for f in files:
@@ -258,27 +269,236 @@ async def _generate_patch_async(ticket_id: int):
                                 project.github_repo_owner, project.github_repo_name, f["path"]
                             )
                             if content:
-                                code_files.append({"path": f["path"], "content": content})
-                            if len(code_files) >= 5:
-                                break
+                                all_repo_files.append({"path": f["path"], "content": content})
                 except Exception:
                     pass
-                if len(code_files) >= 5:
+            
+            # Try to identify the buggy file from the bug description
+            buggy_file = None
+            bug_desc_lower = ticket.description.lower()
+            for f in all_repo_files:
+                if f["path"].lower() in bug_desc_lower or f["path"].split("/")[-1].lower() in bug_desc_lower:
+                    buggy_file = f["path"]
                     break
-
+            
+            # Enrich context if we found the buggy file
+            if buggy_file:
+                from workers.app.context_enrichment import enrich_context
+                code_files = enrich_context(buggy_file, all_repo_files, max_files=15)
+                await _log(execution.id, "info", f"Enriched context with {len(code_files)} related files")
+            else:
+                # Fallback: use first 10 files
+                code_files = all_repo_files[:10]
+            
+            # IMPROVEMENT 2: Include feedback if this is a retry
+            bug_description = ticket.description
+            if feedback:
+                bug_description = f"{ticket.description}\n\n{feedback}"
+            
+            # Generate patch with coder agent
             agent = await get_agent_by_name(db, "coder")
             patch_text = await agent.run({
-                "bug_description": ticket.description,
+                "bug_description": bug_description,
                 "code_files": code_files,
             })
             ticket.patch_content = patch_text
             await db.flush()
             await db.refresh(ticket)
-            create_pull_request.send(ticket_id)
+            
+            await _log(execution.id, "info", "Patch generated, running automatic tests...")
+            
+            # IMPROVEMENT 1: Automatic tests before review
+            test_results = await _run_automatic_tests(
+                project.github_repo_owner, 
+                project.github_repo_name, 
+                token, 
+                patch_text
+            )
+            
+            if not test_results.get("success"):
+                await _log(execution.id, "warning", f"Automatic tests failed: {test_results.get('errors', [])}")
+                
+                # If tests failed, retry with feedback
+                if attempt < 3:
+                    from workers.app.feedback_loop import format_feedback_for_coder
+                    test_feedback = format_feedback_for_coder({
+                        "approved": False,
+                        "rejection_reason": "tests_failed",
+                        "test_feedback": test_results,
+                        "overall_feedback": "Automatic tests failed. Please fix the issues and resubmit.",
+                        "next_steps": ["Fix the test failures", "Ensure all tests pass", "Resubmit the patch"]
+                    }, attempt)
+                    
+                    # Retry with feedback
+                    generate_patch.send(ticket_id, attempt + 1, test_feedback)
+                    return
+                else:
+                    await _log(execution.id, "error", "Max attempts reached, tests still failing")
+                    ticket.status = "failed"
+                    await db.flush()
+                    return
+            
+            await _log(execution.id, "info", "Automatic tests passed, proceeding to review...")
+            
+            # Proceed to review
+            review_patch.send(ticket_id, attempt)
+            
         except Exception as e:
             await _log(execution.id, "error", f"Patch generation failed: {e}")
         finally:
             await client.close()
+
+
+async def _run_automatic_tests(
+    repo_owner: str, 
+    repo_name: str, 
+    token: str, 
+    patch_content: str
+) -> Dict:
+    """
+    Run automatic tests on the patch before review.
+    
+    Returns:
+        {"success": bool, "tests_run": int, "tests_passed": int, "tests_failed": int, "errors": []}
+    """
+    import tempfile
+    import shutil
+    from pathlib import Path
+    from workers.app.test_runner import TestRunner
+    
+    # Create a temporary directory
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_repo = Path(tmpdir) / "repo"
+        
+        try:
+            # Clone the repo
+            import subprocess
+            proc = subprocess.run(
+                ["git", "clone", f"https://x-access-token:{token}@github.com/{repo_owner}/{repo_name}.git", str(tmp_repo)],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if proc.returncode != 0:
+                return {
+                    "success": False,
+                    "tests_run": 0,
+                    "tests_passed": 0,
+                    "tests_failed": 0,
+                    "errors": [f"Failed to clone repo: {proc.stderr}"]
+                }
+            
+            # Apply the patch
+            patch_file = tmp_repo / "patch.diff"
+            with open(patch_file, 'w') as f:
+                f.write(patch_content)
+            
+            proc = subprocess.run(
+                ["git", "apply", "patch.diff"],
+                cwd=tmp_repo,
+                capture_output=True,
+                text=True
+            )
+            
+            if proc.returncode != 0:
+                return {
+                    "success": False,
+                    "tests_run": 0,
+                    "tests_passed": 0,
+                    "tests_failed": 0,
+                    "errors": [f"Failed to apply patch: {proc.stderr}"]
+                }
+            
+            # Install dependencies if needed
+            if (tmp_repo / "package.json").exists():
+                subprocess.run(
+                    ["npm", "install", "--legacy-peer-deps"],
+                    cwd=tmp_repo,
+                    capture_output=True,
+                    timeout=120
+                )
+            
+            # Run tests
+            runner = TestRunner(str(tmp_repo))
+            return runner.run_all_tests()
+        
+        except Exception as e:
+            return {
+                "success": False,
+                "tests_run": 0,
+                "tests_passed": 0,
+                "tests_failed": 0,
+                "errors": [f"Test runner failed: {str(e)}"]
+            }
+
+
+@dramatiq.actor
+def review_patch(ticket_id: int, attempt: int = 1):
+    """Review the patch with structured feedback."""
+    asyncio.run(_review_patch_async(ticket_id, attempt))
+
+
+async def _review_patch_async(ticket_id: int, attempt: int = 1):
+    """
+    Review patch with reviewer agent and structured feedback.
+    If rejected, retry with feedback (max 3 attempts).
+    """
+    async with get_db() as db:
+        ticket = await crud.get_ticket(db, ticket_id)
+        if not ticket or not ticket.patch_content:
+            return
+        
+        execution = await crud.get_execution(db, ticket.execution_id)
+        if not execution:
+            return
+        
+        try:
+            await _log(execution.id, "info", f"Reviewing patch (attempt {attempt}/3)")
+            
+            # Get reviewer agent
+            reviewer = await get_agent_by_name(db, "reviewer")
+            
+            # Prepare review input
+            review_input = {
+                "bug_description": ticket.description,
+                "patch_content": ticket.patch_content,
+                "attempt": attempt,
+            }
+            
+            # Run review
+            review_result = await reviewer.run_json(review_input)
+            
+            # Check if approved
+            review_status = review_result.get("review_status", "rejected")
+            
+            if review_status == "approved":
+                await _log(execution.id, "info", "Patch approved by reviewer")
+                create_pull_request.send(ticket_id)
+            else:
+                await _log(execution.id, "warning", f"Patch rejected by reviewer: {review_result.get('rejection_reason', 'unknown')}")
+                
+                # IMPROVEMENT 2: Feedback loop
+                if attempt < 3:
+                    from workers.app.feedback_loop import parse_reviewer_feedback, format_feedback_for_coder
+                    
+                    # Parse feedback
+                    feedback = parse_reviewer_feedback(review_result)
+                    
+                    # Format for coder
+                    formatted_feedback = format_feedback_for_coder(feedback, attempt)
+                    
+                    # Retry with feedback
+                    generate_patch.send(ticket_id, attempt + 1, formatted_feedback)
+                else:
+                    await _log(execution.id, "error", "Max attempts reached, patch still rejected")
+                    ticket.status = "failed"
+                    await db.flush()
+        
+        except Exception as e:
+            await _log(execution.id, "error", f"Patch review failed: {e}")
+            ticket.status = "failed"
+            await db.flush()
 
 
 @dramatiq.actor
