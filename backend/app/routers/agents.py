@@ -27,7 +27,9 @@ async def list_agents(
 ):
     skip = (page - 1) * per_page
     items, total = await crud.get_agents(db, skip=skip, limit=per_page)
-    return {"items": items, "total": total, "page": page, "per_page": per_page}
+    # Convert SQLAlchemy objects to Pydantic schemas
+    items_data = [schemas.AgentResponse.model_validate(item) for item in items]
+    return {"items": items_data, "total": total, "page": page, "per_page": per_page}
 
 
 @router.get("/{agent_id}", response_model=schemas.AgentResponse)
