@@ -91,3 +91,23 @@ export const secretsApi = {
     api.put(`/api/projects/${projectId}/secrets/${id}`, data),
   delete: (projectId: number, id: number) => api.delete(`/api/projects/${projectId}/secrets/${id}`),
 }
+
+export const dashboardApi = {
+  get: (projectId?: number) => api.get('/api/dashboard', { params: projectId ? { project_id: projectId } : {} }),
+  stats: (projectId?: number) => api.get('/api/dashboard/stats', { params: projectId ? { project_id: projectId } : {} }),
+  timeline: (projectId?: number, limit = 50) => api.get('/api/dashboard/timeline', { params: { ...(projectId ? { project_id: projectId } : {}), limit } }),
+  activeSessions: (projectId?: number) => api.get('/api/dashboard/sessions/active', { params: projectId ? { project_id: projectId } : {} }),
+}
+
+export const sessionsApi = {
+  list: (projectId?: number, status?: string) => api.get('/api/sessions', { params: { ...(projectId ? { project_id: projectId } : {}), ...(status ? { status_filter: status } : {}) } }),
+  get: (id: number) => api.get(`/api/sessions/${id}`),
+  create: (data: { project_id: number; trigger_type?: string; auto_close_github_issues?: boolean }) => api.post('/api/sessions', data),
+  pause: (id: number) => api.post(`/api/sessions/${id}/pause`),
+  resume: (id: number) => api.post(`/api/sessions/${id}/resume`),
+  stop: (id: number) => api.post(`/api/sessions/${id}/stop`),
+  wsUrl: (id: number) => {
+    const baseUrl = API_URL.replace(/^http/, 'ws')
+    return `${baseUrl}/api/sessions/ws/${id}`
+  },
+}

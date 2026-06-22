@@ -10,11 +10,15 @@ import {
   LogOut,
   Menu,
   X,
+  Activity,
+  Zap,
 } from 'lucide-react'
 import { useState } from 'react'
 
 const navItems = [
+  { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/projects', label: 'Projects', icon: LayoutDashboard },
+  { path: '/sessions', label: 'Sessions', icon: Zap },
   { path: '/secrets', label: 'Secrets', icon: Lock },
   { path: '/providers', label: 'Providers', icon: Settings },
   { path: '/agents', label: 'Agents', icon: Bot },

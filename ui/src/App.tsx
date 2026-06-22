@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import ProvidersPage from './pages/ProvidersPage'
@@ -12,6 +13,8 @@ import ExecutionDetailPage from './pages/ExecutionDetailPage'
 import TicketsPage from './pages/TicketsPage'
 import TicketDetailPage from './pages/TicketDetailPage'
 import SecretsPage from './pages/SecretsPage'
+import SessionsPage from './pages/SessionsPage'
+import SessionPage from './pages/SessionPage'
 
 function App() {
   const { user, isLoading } = useAuth()
@@ -37,7 +40,8 @@ function App() {
     <>
       <Layout>
         <Routes>
-          <Route path="/" element={<Navigate to="/projects" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/secrets" element={<SecretsPage />} />
@@ -47,6 +51,8 @@ function App() {
           <Route path="/executions/:id" element={<ExecutionDetailPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/tickets/:id" element={<TicketDetailPage />} />
+          <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/sessions/:id" element={<SessionPage />} />
         </Routes>
       </Layout>
       <Toaster position="top-right" />
