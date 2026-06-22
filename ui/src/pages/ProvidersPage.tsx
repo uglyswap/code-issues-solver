@@ -5,6 +5,24 @@ import type { AIProvider } from '../types'
 import { Plus, Trash2, Edit, Loader2, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+const PROVIDER_PRESETS = {
+  openrouter: {
+    name: 'openrouter',
+    base_url: 'https://openrouter.ai/api/v1',
+    models: { default: 'openrouter/auto' },
+  },
+  alibaba: {
+    name: 'alibaba',
+    base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    models: { default: 'qwen-plus' },
+  },
+  openai: {
+    name: 'openai',
+    base_url: 'https://api.openai.com/v1',
+    models: { default: 'gpt-4' },
+  },
+}
+
 export default function ProvidersPage() {
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
@@ -15,7 +33,32 @@ export default function ProvidersPage() {
   const updateMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => providersApi.update(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); setEditing(null); toast.success('Provider updated') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
   const deleteMutation = useMutation({ mutationFn: providersApi.delete, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success('Provider deleted') } })
   const testMutation = useMutation({ mutationFn: providersApi.test, onSuccess: (res) => { if (res.data.success) { toast.success('✓ ' + res.data.message) } else { toast.error('✗ ' + res.data.message) } }, onError: () => { toast.error('Test failed') } })
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); const payload = { ...form }; if (typeof payload.models === 'string') { try { payload.models = JSON.parse(payload.models) } catch {} } if (editing) { updateMutation.mutate({ id: editing.id, data: payload }) } else { createMutation.mutate(payload) } }
+  const handleSubmit = (e: React.FormEvent) => { 
+    e.preventDefault(); 
+    const payload = { ...form }; 
+    
+    // Parse models JSON
+    if (typeof payload.models === 'string') { 
+      try { 
+        payload.models = JSON.parse(payload.models);
+      } catch (err) {
+        toast.error('Format JSON invalide pour les modèles. Exemple: {"default": "qwen-plus"}');
+        return;
+      }
+    } 
+    
+    // Validate models is an object
+    if (payload.models && typeof payload.models !== 'object') {
+      toast.error('Les modèles doivent être un objet JSON. Exemple: {"default": "qwen-plus"}');
+      return;
+    }
+    
+    if (editing) { 
+      updateMutation.mutate({ id: editing.id, data: payload });
+    } else { 
+      createMutation.mutate(payload);
+    } 
+  }
   const providers: AIProvider[] = data?.items || []
   return (
     <div>
@@ -25,16 +68,31 @@ export default function ProvidersPage() {
       </div>
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <p className="text-sm text-blue-900">
-          <strong>Qu'est-ce qu'un AI Provider ?</strong> Un provider configure un service d'IA (OpenRouter, Alibaba, etc.) 
+          <strong>Qu'est-ce qu'un AI Provider ?</strong> Un provider configure un service d'IA (OpenRouter, Alibaba Cloud, OpenAI, etc.) 
           avec sa clé API. Les agents IA utilisent ces providers pour générer des patches, analyser les bugs, etc.
         </p>
         <div className="mt-2 text-xs text-blue-700">
-          <strong>Exemple :</strong> OpenRouter avec l'API key sk-or-... et la base URL https://openrouter.ai/api/v1
+          <strong>Note :</strong> Le modèle utilisé est défini au niveau de chaque agent (page Agents), pas ici.
         </div>
       </div>
       {(showForm || editing) && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 space-y-4">
           <h2 className="font-semibold text-lg">{editing ? 'Edit Provider' : 'New Provider'}</h2>
+          {!editing && (
+            <div className="flex gap-2 mb-4">
+              <span className="text-sm text-slate-600 py-2">Presets :</span>
+              {Object.entries(PROVIDER_PRESETS).map(([key, preset]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setForm({ ...form, ...preset, api_key: '' })}
+                  className="px-3 py-1 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg"
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <input placeholder="Name" required className="border rounded-lg px-3 py-2 w-full" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -52,9 +110,25 @@ export default function ProvidersPage() {
               <input placeholder="Priority" type="number" className="border rounded-lg px-3 py-2 w-full" value={String(form.priority || 1)} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })} />
               <p className="text-xs text-slate-500 mt-1">Priorité (1 = plus haute, utilisé si plusieurs providers)</p>
             </div>
-            <div>
-              <input placeholder='{"default":"gpt-4"}' className="border rounded-lg px-3 py-2 w-full" value={typeof form.models === 'string' ? form.models : JSON.stringify(form.models)} onChange={(e) => setForm({ ...form, models: e.target.value })} />
-              <p className="text-xs text-slate-500 mt-1">Modèles disponibles en JSON (ex: {"{"}"default":"anthropic/claude-3.5-sonnet"{"}"})</p>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Modèles disponibles (optionnel)</label>
+              <textarea
+                placeholder='{"default": "qwen-plus"}'
+                className="border rounded-lg px-3 py-2 w-full h-20 font-mono text-sm"
+                value={typeof form.models === 'string' ? form.models : JSON.stringify(form.models, null, 2)}
+                onChange={(e) => setForm({ ...form, models: e.target.value })}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                <strong>Optionnel :</strong> Liste des modèles disponibles en JSON. Le modèle utilisé est défini au niveau de chaque agent.
+                <br />
+                <strong>Exemples :</strong>
+                <br />
+                • OpenRouter : <code className="bg-slate-100 px-1 rounded">{"{"}"default": "anthropic/claude-3.5-sonnet"{"}"}</code>
+                <br />
+                • Alibaba Cloud : <code className="bg-slate-100 px-1 rounded">{"{"}"default": "qwen-plus"{"}"}</code>
+                <br />
+                • OpenAI : <code className="bg-slate-100 px-1 rounded">{"{"}"default": "gpt-4"{"}"}</code>
+              </p>
             </div>
             <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enabled</label>
           </div>
@@ -77,6 +151,18 @@ export default function ProvidersPage() {
                 </div>
               </div>
               <p className="text-sm text-slate-600">{p.base_url}</p>
+              {p.models && Object.keys(p.models).length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-slate-500 mb-1">Modèles :</p>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(p.models).map(([key, value]) => (
+                      <span key={key} className="bg-purple-50 text-purple-700 text-xs px-2 py-0.5 rounded">
+                        {key}: {String(value)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 text-xs mt-2">
                 <span className="bg-slate-100 px-2 py-1 rounded">Priority: {p.priority}</span>
                 <span className={`px-2 py-1 rounded ${p.enabled ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{p.enabled ? 'Enabled' : 'Disabled'}</span>

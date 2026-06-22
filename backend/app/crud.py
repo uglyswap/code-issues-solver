@@ -279,13 +279,31 @@ async def get_executions(db: AsyncSession, project_id: int, skip: int = 0, limit
     query = query.order_by(desc(models.Execution.created_at)).offset(skip).limit(limit)
     result = await db.execute(query)
     items = result.scalars().all()
+    
+    # Convert SQLAlchemy objects to dicts to avoid serialization issues
+    items_dict = [
+        {
+            "id": e.id,
+            "project_id": e.project_id,
+            "status": e.status,
+            "trigger_type": e.trigger_type,
+            "started_at": e.started_at,
+            "completed_at": e.completed_at,
+            "total_bugs_found": e.total_bugs_found,
+            "total_bugs_fixed": e.total_bugs_fixed,
+            "logs": e.logs,
+            "error_message": e.error_message,
+            "created_at": e.created_at,
+        }
+        for e in items
+    ]
 
     count_query = select(func.count(models.Execution.id)).where(models.Execution.project_id == project_id)
     if status:
         count_query = count_query.where(models.Execution.status == status)
     total_result = await db.execute(count_query)
     total = total_result.scalar()
-    return items, total
+    return items_dict, total
 
 
 async def get_execution(db: AsyncSession, execution_id: int) -> Optional[models.Execution]:
