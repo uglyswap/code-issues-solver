@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from backend.app.config import settings
 from backend.app.database import engine, Base
 from backend.app.limiter import limiter
-from backend.app.routers import auth, projects, providers, agents, executions, tickets, webhooks, secrets, health, knowledge
+from backend.app.routers import auth, projects, providers, agents, executions, tickets, webhooks, secrets, health, knowledge, dashboard, sessions
 
 
 @asynccontextmanager
@@ -48,3 +48,5 @@ app.include_router(webhooks.router)
 app.include_router(secrets.router)
 app.include_router(health.router)
 app.include_router(knowledge.router)
+app.include_router(dashboard.router)
+app.include_router(sessions.router)

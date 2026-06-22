@@ -138,6 +138,17 @@ class Ticket(Base):
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
     ignored_reason = Column(Text)
+    
+    # Dashboard fields
+    resolution_summary = Column(JSON)  # {problem, solution, root_cause, files_affected}
+    attempts_log = Column(JSON, default=list)  # [{attempt, timestamp, status, feedback, patch}]
+    resolution_time_seconds = Column(Float)  # Time to resolve
+    files_changed = Column(JSON, default=list)  # List of files modified
+    test_results_before = Column(JSON)  # Test results before fix
+    test_results_after = Column(JSON)  # Test results after fix
+    screenshots_before = Column(JSON, default=list)  # Screenshots before fix
+    screenshots_after = Column(JSON, default=list)  # Screenshots after fix
+    
     created_at = Column(DateTime, default=now_utc)
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
@@ -208,3 +219,33 @@ class SuccessfulPatch(Base):
     created_at = Column(DateTime, default=now_utc)
 
     ticket = relationship("Ticket")
+
+
+class Session(Base):
+    """Continuous correction session - runs until all tickets are resolved."""
+    __tablename__ = "sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(50), nullable=False, default="pending")  # pending, running, paused, completed, stopped
+    trigger_type = Column(String(50), nullable=False, default="manual")  # manual, cron
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    
+    # Progress tracking
+    total_tickets_found = Column(Integer, default=0)
+    total_tickets_resolved = Column(Integer, default=0)
+    total_tickets_failed = Column(Integer, default=0)
+    current_ticket_id = Column(Integer)  # Currently being processed
+    
+    # Session logs (real-time)
+    logs = Column(JSON, default=list)  # [{timestamp, level, message, ticket_id}]
+    
+    # Settings
+    auto_close_github_issues = Column(Boolean, default=True)
+    max_concurrent_tickets = Column(Integer, default=1)  # For future parallel processing
+    
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+
+    project = relationship("Project")
