@@ -13,8 +13,8 @@ const PROVIDER_PRESETS = {
   },
   alibaba: {
     name: 'alibaba',
-    base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    models: { default: 'qwen-plus' },
+    base_url: 'https://coding-intl.dashscope.aliyuncs.com/v1',
+    models: { default: 'qwen3.7-plus' },
   },
   openai: {
     name: 'openai',
@@ -29,8 +29,34 @@ export default function ProvidersPage() {
   const [editing, setEditing] = useState<AIProvider | null>(null)
   const [form, setForm] = useState<Record<string, unknown>>({ enabled: true, priority: 1, models: {} })
   const { data, isLoading } = useQuery({ queryKey: ['providers'], queryFn: () => providersApi.list().then((r) => r.data) })
-  const createMutation = useMutation({ mutationFn: providersApi.create, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); setShowForm(false); setForm({ enabled: true, priority: 1, models: {} }); toast.success('Provider created') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
-  const updateMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => providersApi.update(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); setEditing(null); toast.success('Provider updated') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
+  const createMutation = useMutation({ 
+    mutationFn: providersApi.create, 
+    onSuccess: () => { 
+      queryClient.invalidateQueries({ queryKey: ['providers'] }); 
+      setShowForm(false);
+      setEditing(null);
+      setForm({ enabled: true, priority: 1, models: {} }); 
+      toast.success('✓ Provider créé avec succès');
+    }, 
+    onError: (err: any) => {
+      console.error('Create provider error:', err);
+      toast.error(err.response?.data?.detail || 'Erreur lors de la création du provider');
+    }
+  })
+  const updateMutation = useMutation({ 
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => providersApi.update(id, data), 
+    onSuccess: () => { 
+      queryClient.invalidateQueries({ queryKey: ['providers'] }); 
+      setEditing(null);
+      setShowForm(false);
+      setForm({ enabled: true, priority: 1, models: {} });
+      toast.success('✓ Provider mis à jour avec succès');
+    }, 
+    onError: (err: any) => {
+      console.error('Update provider error:', err);
+      toast.error(err.response?.data?.detail || 'Erreur lors de la mise à jour du provider');
+    }
+  })
   const deleteMutation = useMutation({ mutationFn: providersApi.delete, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success('Provider deleted') } })
   const testMutation = useMutation({ mutationFn: providersApi.test, onSuccess: (res) => { if (res.data.success) { toast.success('✓ ' + res.data.message) } else { toast.error('✗ ' + res.data.message) } }, onError: () => { toast.error('Test failed') } })
   const handleSubmit = (e: React.FormEvent) => { 

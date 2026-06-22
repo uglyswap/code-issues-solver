@@ -75,7 +75,7 @@ async def test_provider(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_active_user),
 ):
-    """Test the connection to an AI provider."""
+    """Test the connection to an AI provider by making a minimal chat completion call."""
     db_provider = await crud.get_ai_provider(db, provider_id)
     if not db_provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
@@ -84,19 +84,31 @@ async def test_provider(
         # Decrypt API key
         api_key = decrypt_value(db_provider.api_key_encrypted)
         
-        # Test connection by calling /models or / endpoint
-        test_url = f"{db_provider.base_url.rstrip('/')}/models"
+        # Get the default model from the provider's models config
+        models_config = db_provider.models or {}
+        model = models_config.get("default", "gpt-3.5-turbo")
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
+        # Test connection by making a minimal chat completion call
+        test_url = f"{db_provider.base_url.rstrip('/')}/chat/completions"
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
                 test_url,
-                headers={"Authorization": f"Bearer {api_key}"}
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                    "max_tokens": 5,
+                },
             )
             
             if response.status_code == 200:
                 return {
                     "success": True,
-                    "message": "Connection successful",
+                    "message": f"Connection successful with model {model}",
                     "status_code": response.status_code
                 }
             else:
@@ -104,7 +116,7 @@ async def test_provider(
                     "success": False,
                     "message": f"API returned status {response.status_code}",
                     "status_code": response.status_code,
-                    "detail": response.text[:200]
+                    "detail": response.text[:500]
                 }
     except Exception as e:
         return {
