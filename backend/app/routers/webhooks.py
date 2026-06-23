@@ -10,7 +10,7 @@ from backend.app.config import settings
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
-GITHUB_WEBHOOK_SECRET = settings.jwt_secret
+GITHUB_WEBHOOK_SECRET = settings.github_webhook_secret
 
 
 def verify_github_signature(payload: bytes, signature: str) -> bool:
