@@ -46,6 +46,10 @@ async def update_secret(
     project = await crud.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    # Verifier que le secret appartient bien au projet du chemin (evite la manipulation inter-projet)
+    existing = await crud.get_secret(db, secret_id)
+    if not existing or existing.project_id != project_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Secret not found")
     db_secret = await crud.update_secret(db, secret_id, secret)
     if not db_secret:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Secret not found")

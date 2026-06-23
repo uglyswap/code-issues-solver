@@ -21,6 +21,19 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = False
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        # Accepter une liste JSON OU une chaine separee par des virgules depuis l'env.
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            if s.startswith("["):
+                return v  # JSON: laisse pydantic parser
+            return [item.strip() for item in s.split(",") if item.strip()]
+        return v
+
     @field_validator("encryption_key", "jwt_secret", "github_webhook_secret")
     @classmethod
     def warn_weak_secrets(cls, v: str, info) -> str:

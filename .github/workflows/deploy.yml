@@ -1,21 +1,36 @@
 name: Deploy
 
+# Declenche apres la fin du workflow CI (needs ne fonctionne qu'intra-workflow).
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 jobs:
   deploy:
-    needs: [lint, test, e2e, security]
+    # Ne deploie que si la CI a reussi sur main.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to VPS
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+          # Cle privee ecrite via secret avec permissions strictes 600.
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no user@207.180.243.246 << 'EOF'
+          # ssh-keyscan peuple known_hosts au lieu de desactiver la verification d'hote.
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" << 'EOF'
             cd /opt/data/code-issues-solver
             git pull origin main
             docker-compose down

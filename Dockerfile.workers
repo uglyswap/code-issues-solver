@@ -14,7 +14,11 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuse
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN playwright install chromium
+# Cache navigateurs hors du HOME root pour qu'il soit lisible par l'utilisateur runtime.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# --with-deps installe les dependances systeme Chromium (en root, avant USER appuser).
+RUN playwright install --with-deps chromium \
+    && chown -R appuser:appuser /ms-playwright
 
 COPY backend/app ./backend/app
 COPY workers/app ./workers/app

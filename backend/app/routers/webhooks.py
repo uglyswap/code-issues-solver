@@ -74,9 +74,16 @@ async def github_webhook(
                     )
                     recent_exec = exec_res.scalar_one_or_none()
                     if recent_exec:
-                        for ticket in recent_exec.tickets:
-                            if ticket.status == "deployed":
-                                from workers.app.tasks import verify_fix
-                                verify_fix.send(ticket.id)
+                        # Charger explicitement les tickets: l'acces lazy a recent_exec.tickets
+                        # leverait MissingGreenlet en contexte async (asyncpg).
+                        tickets_res = await db.execute(
+                            select(models.Ticket).where(
+                                models.Ticket.execution_id == recent_exec.id,
+                                models.Ticket.status == "deployed",
+                            )
+                        )
+                        for ticket in tickets_res.scalars().all():
+                            from workers.app.tasks import verify_fix
+                            verify_fix.send(ticket.id)
 
     return {"status": "ok"}

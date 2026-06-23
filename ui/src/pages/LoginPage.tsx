@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { getErrorDetail } from '../lib/errors'
 import { Bug } from 'lucide-react'
 
 export default function LoginPage() {
@@ -22,8 +23,8 @@ export default function LoginPage() {
       }
       await login(username, password)
       navigate('/projects', { replace: true })
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Authentication failed')
+    } catch (err) {
+      setError(getErrorDetail(err, 'Authentication failed'))
     }
   }
 
@@ -36,10 +37,12 @@ export default function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700">Username</label>
+            <label htmlFor="login-username" className="block text-sm font-medium text-slate-700">Username</label>
             <input
+              id="login-username"
               type="text"
               required
+              autoComplete="username"
               className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -47,10 +50,12 @@ export default function LoginPage() {
           </div>
           {isRegister && (
             <div>
-              <label className="block text-sm font-medium text-slate-700">Email</label>
+              <label htmlFor="login-email" className="block text-sm font-medium text-slate-700">Email</label>
               <input
+                id="login-email"
                 type="email"
                 required
+                autoComplete="email"
                 className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -58,16 +63,24 @@ export default function LoginPage() {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-slate-700">Password</label>
+            <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">Password</label>
             <input
+              id="login-password"
               type="password"
               required
+              minLength={isRegister ? 8 : undefined}
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
               className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            {isRegister && (
+              <p className="mt-1 text-xs text-slate-500">Password must be at least 8 characters.</p>
+            )}
           </div>
-          {error && <div className="text-red-600 text-sm">{error}</div>}
+          {error && (
+            <div role="alert" aria-live="assertive" className="text-red-600 text-sm">{error}</div>
+          )}
           <button
             type="submit"
             className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition"

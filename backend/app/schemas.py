@@ -355,12 +355,14 @@ class BugPatternResponse(BugPatternBase):
 
 
 # SuccessfulPatch schemas
+# Aligne sur le modele models.SuccessfulPatch (ticket_id, title, files_changed)
 class SuccessfulPatchBase(BaseModel):
-    pattern_id: str = Field(..., max_length=100)
+    ticket_id: int
     category: str = Field(..., max_length=100)
+    title: str = Field(..., max_length=500)
     description: str
     patch_content: str
-    files_affected: Optional[List[str]] = None
+    files_changed: Optional[List[str]] = None
     success_rate: float = 1.0
 
 

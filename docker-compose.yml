@@ -46,10 +46,11 @@ services:
       dockerfile: Dockerfile.backend
     environment:
       DATABASE_URL: postgresql+asyncpg://app:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/code_issues_solver
-      REDIS_URL: redis://redis:***@postgres:5432/code_issues_solver
       REDIS_URL: redis://redis:6379/0
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}
+      ENVIRONMENT: production
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       postgres:
@@ -57,7 +58,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import redis; r = redis.from_url('redis://redis:6379/0'); r.ping()"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -69,11 +70,39 @@ services:
           memory: 2G
           cpus: '2.0'
 
+  workers:
+    build:
+      context: .
+      dockerfile: Dockerfile.workers
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/code_issues_solver
+      REDIS_URL: redis://redis:6379/0
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}
+      ENVIRONMENT: production
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Pas de command: Dockerfile.workers lance deja "dramatiq workers.app.tasks -p 2"
+    # (tasks.py importe session_worker, donc tous les acteurs sont enregistres).
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # Playwright/Chromium gourmand en memoire/CPU sur cette brique centrale.
+          memory: 2G
+          cpus: '2.0'
+
   ui:
     build:
       context: .
       dockerfile: Dockerfile.ui
     ports:
+      # Acces direct au UI pour le dev (en prod, passer par le reverse proxy nginx :3500).
       - "3501:3000"
     environment:
       VITE_API_URL: ${API_URL:-http://localhost:3500}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { secretsApi, projectsApi } from '../services/api'
+import { getErrorDetail } from '../lib/errors'
 import type { Secret, Project } from '../types'
 import { Plus, Trash2, Edit, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -13,9 +14,10 @@ export default function SecretsPage() {
   const [form, setForm] = useState<Record<string, unknown>>({})
   const { data: projectsData } = useQuery({ queryKey: ['projects'], queryFn: () => projectsApi.list().then((r) => r.data) })
   const { data, isLoading } = useQuery({ queryKey: ['secrets', projectId], queryFn: () => { const pid = projectId || projectsData?.items?.[0]?.id; if (!pid) return []; return secretsApi.list(pid).then((r) => r.data) }, enabled: !!projectsData })
-  const createMutation = useMutation({ mutationFn: () => { const pid = projectId || projectsData?.items?.[0]?.id; return secretsApi.create(pid!, form) }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['secrets', projectId] }); setShowForm(false); setForm({}); toast.success('Secret created') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
-  const updateMutation = useMutation({ mutationFn: () => { const pid = projectId || projectsData?.items?.[0]?.id; return secretsApi.update(pid!, editing!.id, form) }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['secrets', projectId] }); setEditing(null); setForm({}); toast.success('Secret updated') }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
-  const deleteMutation = useMutation({ mutationFn: (secretId: number) => { const pid = projectId || projectsData?.items?.[0]?.id; return secretsApi.delete(pid!, secretId) }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['secrets', projectId] }); toast.success('Secret deleted') } })
+  const createMutation = useMutation({ mutationFn: () => { const pid = projectId || projectsData?.items?.[0]?.id; return secretsApi.create(pid!, form) }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['secrets', projectId] }); setShowForm(false); setForm({}); toast.success('Secret created') }, onError: (err) => toast.error(getErrorDetail(err)) })
+  const updateMutation = useMutation({ mutationFn: () => { const pid = projectId || projectsData?.items?.[0]?.id; return secretsApi.update(pid!, editing!.id, form) }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['secrets', projectId] }); setEditing(null); setForm({}); toast.success('Secret updated') }, onError: (err) => toast.error(getErrorDetail(err)) })
+  const deleteMutation = useMutation({ mutationFn: (secretId: number) => { const pid = projectId || projectsData?.items?.[0]?.id; return secretsApi.delete(pid!, secretId) }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['secrets', projectId] }); toast.success('Secret deleted') }, onError: (err) => toast.error(getErrorDetail(err)) })
+  const handleDelete = (secret: Secret) => { if (window.confirm(`Delete secret "${secret.name}"? This action cannot be undone.`)) { deleteMutation.mutate(secret.id) } }
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); if (editing) { updateMutation.mutate() } else { createMutation.mutate() } }
   const secrets: Secret[] = data || []
   const projects: Project[] = projectsData?.items || []
@@ -24,7 +26,7 @@ export default function SecretsPage() {
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold">Secrets</h1>
         <div className="flex gap-2">
-          <select className="border rounded-lg px-3 py-2" value={projectId} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : '')}><option value="">Select Project</option>{projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
+          <select aria-label="Select project" className="border rounded-lg px-3 py-2" value={projectId} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : '')}><option value="">Select Project</option>{projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
           <button onClick={() => { setShowForm(true); setEditing(null); setForm({}) }} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"><Plus className="w-4 h-4" /> New Secret</button>
         </div>
       </div>
@@ -42,20 +44,23 @@ export default function SecretsPage() {
           <h2 className="font-semibold text-lg">{editing ? 'Edit Secret' : 'New Secret'}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <input placeholder="Name" required className="border rounded-lg px-3 py-2 w-full" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <p className="text-xs text-slate-500 mt-1">Nom du secret (ex: "GITHUB_TOKEN", "API_KEY")</p>
+              <label htmlFor="secret-name" className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+              <input id="secret-name" aria-describedby="secret-name-help" placeholder="Name" required className="border rounded-lg px-3 py-2 w-full" value={String(form.name || '')} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <p id="secret-name-help" className="text-xs text-slate-500 mt-1">Nom du secret (ex: "GITHUB_TOKEN", "API_KEY")</p>
             </div>
             <div>
-              <input placeholder="Value" required type="password" className="border rounded-lg px-3 py-2 w-full" value={String(form.value || '')} onChange={(e) => setForm({ ...form, value: e.target.value })} />
-              <p className="text-xs text-slate-500 mt-1">Valeur du secret (chiffrée automatiquement)</p>
+              <label htmlFor="secret-value" className="block text-sm font-medium text-slate-700 mb-1">Value</label>
+              <input id="secret-value" aria-describedby="secret-value-help" placeholder="Value" required type="password" className="border rounded-lg px-3 py-2 w-full" value={String(form.value || '')} onChange={(e) => setForm({ ...form, value: e.target.value })} />
+              <p id="secret-value-help" className="text-xs text-slate-500 mt-1">Valeur du secret (chiffrée automatiquement)</p>
             </div>
           </div>
           <div>
-            <textarea placeholder="Description" className="w-full border rounded-lg px-3 py-2" value={String(form.description || '')} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            <p className="text-xs text-slate-500 mt-1">Description optionnelle (ex: "Token GitHub pour créer des issues")</p>
+            <label htmlFor="secret-description" className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+            <textarea id="secret-description" aria-describedby="secret-description-help" placeholder="Description" className="w-full border rounded-lg px-3 py-2" value={String(form.description || '')} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <p id="secret-description-help" className="text-xs text-slate-500 mt-1">Description optionnelle (ex: "Token GitHub pour créer des issues")</p>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">{editing ? 'Update' : 'Create'}</button>
+            <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">{(createMutation.isPending || updateMutation.isPending) && <Loader2 className="animate-spin w-4 h-4" />}{(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             <button type="button" onClick={() => { setShowForm(false); setEditing(null) }} className="px-4 py-2 rounded-lg border">Cancel</button>
           </div>
         </form>
@@ -70,8 +75,8 @@ export default function SecretsPage() {
                   <td className="px-4 py-3 font-medium">{s.name}</td>
                   <td className="px-4 py-3 text-slate-600">{s.description || '-'}</td>
                   <td className="px-4 py-3 flex gap-2">
-                    <button onClick={() => { setEditing(s); setForm({...s} as Record<string, unknown>); setShowForm(true) }} className="text-slate-500 hover:text-primary-600"><Edit className="w-4 h-4" /></button>
-                    <button onClick={() => deleteMutation.mutate(s.id)} className="text-slate-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    <button type="button" aria-label={`Edit ${s.name}`} onClick={() => { setEditing(s); setForm({...s} as Record<string, unknown>); setShowForm(true) }} className="text-slate-500 hover:text-primary-600"><Edit className="w-4 h-4" aria-hidden="true" /></button>
+                    <button type="button" aria-label={`Delete ${s.name}`} onClick={() => handleDelete(s)} className="text-slate-500 hover:text-red-600"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                   </td>
                 </tr>
               ))}

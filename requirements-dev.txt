@@ -1,0 +1,18 @@
+# Dependances de developpement / test / lint.
+# Installer en plus des deps de prod: pip install -r requirements.txt -r requirements-dev.txt
+# Non incluses dans les images Docker de prod (Dockerfile.backend / Dockerfile.workers).
+
+-r requirements.txt
+
+# Testing
+pytest==8.2.1
+pytest-asyncio==0.23.7
+pytest-cov==5.0.0
+pytest-mock==3.14.0
+factory-boy==3.3.0
+asgi-lifespan==2.1.0
+
+# Linting / Typing
+ruff==0.4.5
+mypy==1.10.0
+black==24.4.2

@@ -1,7 +1,8 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { projectsApi, executionsApi } from '../services/api'
-import { Play, ArrowLeft } from 'lucide-react'
+import { getErrorDetail } from '../lib/errors'
+import { Play, ArrowLeft, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function ProjectDetailPage() {
@@ -9,10 +10,16 @@ export default function ProjectDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const projectId = Number(id)
-  const { data } = useQuery({ queryKey: ['project', projectId], queryFn: () => projectsApi.get(projectId).then((r) => r.data) })
-  const startMutation = useMutation({ mutationFn: () => executionsApi.create(projectId, { trigger_type: 'manual' }), onSuccess: () => { toast.success('Execution started'); queryClient.invalidateQueries({ queryKey: ['executions', projectId] }) }, onError: (err: any) => toast.error(err.response?.data?.detail || 'Error') })
+  const { data, isLoading, isError } = useQuery({ queryKey: ['project', projectId], queryFn: () => projectsApi.get(projectId).then((r) => r.data) })
+  const startMutation = useMutation({ mutationFn: () => executionsApi.create(projectId, { trigger_type: 'manual' }), onSuccess: () => { toast.success('Execution started'); queryClient.invalidateQueries({ queryKey: ['executions', projectId] }) }, onError: (err) => toast.error(getErrorDetail(err)) })
   const project = data
-  if (!project) return <div>Loading...</div>
+  if (isLoading) return <div className="flex justify-center"><Loader2 className="animate-spin w-6 h-6" /></div>
+  if (isError || !project) return (
+    <div className="text-center py-12">
+      <p className="text-slate-600 mb-4">Project not found</p>
+      <Link to="/projects" className="text-primary-600 hover:underline">Back to projects</Link>
+    </div>
+  )
   return (
     <div>
       <button onClick={() => navigate('/projects')} className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4"><ArrowLeft className="w-4 h-4" /> Back</button>

@@ -29,7 +29,15 @@ async def get_current_active_user(
             detail="Invalid token payload",
         )
     
-    user = await crud.get_user(db, int(user_id))
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    user = await crud.get_user_by_id(db, user_id_int)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

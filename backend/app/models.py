@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, Float, DateTime, ForeignKey, UniqueConstraint, JSON
+# BACK-09: DateTime(timezone=True) partout, car now_utc() produit des datetimes tz-aware (UTC).
 from sqlalchemy.orm import relationship
 from backend.app.database import Base
 from datetime import datetime, timezone
@@ -16,7 +17,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     audit_logs = relationship("AuditLog", back_populates="user")
 
@@ -36,8 +37,8 @@ class Project(Base):
     deploy_webhook_url = Column(String(500))
     schedule_cron = Column(String(100))
     enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=now_utc)
-    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     executions = relationship("Execution", back_populates="project", cascade="all, delete-orphan")
     secrets = relationship("Secret", back_populates="project", cascade="all, delete-orphan")
@@ -54,7 +55,7 @@ class AIProvider(Base):
     models = Column(JSON, nullable=False, default=dict)
     priority = Column(Integer, default=1)
     enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     agents = relationship("Agent", back_populates="provider")
 
@@ -66,12 +67,12 @@ class Agent(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text)
     system_prompt_template = Column(Text, nullable=False)
-    provider_id = Column(Integer, ForeignKey("ai_providers.id"))
+    provider_id = Column(Integer, ForeignKey("ai_providers.id", ondelete="SET NULL"))
     model = Column(String(255), nullable=False)
     temperature = Column(Float, default=0.7)
     max_tokens = Column(Integer, default=4000)
     enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     provider = relationship("AIProvider", back_populates="agents")
 
@@ -83,13 +84,13 @@ class Execution(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(50), nullable=False, default="pending")
     trigger_type = Column(String(50), nullable=False)
-    started_at = Column(DateTime)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
     total_bugs_found = Column(Integer, default=0)
     total_bugs_fixed = Column(Integer, default=0)
     logs = Column(JSON, default=list)
     error_message = Column(Text)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     project = relationship("Project", back_populates="executions")
     test_sessions = relationship("TestSession", back_populates="execution", cascade="all, delete-orphan")
@@ -106,10 +107,10 @@ class TestSession(Base):
     console_logs = Column(JSON, default=list)
     network_requests = Column(JSON, default=list)
     pages_visited = Column(JSON, default=list)
-    started_at = Column(DateTime)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
     duration_seconds = Column(Float)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     execution = relationship("Execution", back_populates="test_sessions")
     tickets = relationship("Ticket", back_populates="test_session")
@@ -149,8 +150,8 @@ class Ticket(Base):
     screenshots_before = Column(JSON, default=list)  # Screenshots before fix
     screenshots_after = Column(JSON, default=list)  # Screenshots after fix
     
-    created_at = Column(DateTime, default=now_utc)
-    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     execution = relationship("Execution", back_populates="tickets")
     test_session = relationship("TestSession", back_populates="tickets")
@@ -164,7 +165,7 @@ class Secret(Base):
     name = Column(String(255), nullable=False)
     value_encrypted = Column(Text, nullable=False)
     description = Column(Text)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     __table_args__ = (UniqueConstraint("project_id", "name", name="uq_project_secret_name"),)
 
@@ -175,15 +176,15 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    project_id = Column(Integer, ForeignKey("projects.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))
     action = Column(String(255), nullable=False)
     resource_type = Column(String(100))
     resource_id = Column(Integer)
     details = Column(JSON)
     ip_address = Column(String(50))
     user_agent = Column(Text)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     user = relationship("User", back_populates="audit_logs")
     project = relationship("Project", back_populates="audit_logs")
@@ -201,8 +202,8 @@ class BugPattern(Base):
     example_files = Column(JSON, default=list)
     success_rate = Column(Float, default=0.0)
     occurrences = Column(Integer, default=0)
-    created_at = Column(DateTime, default=now_utc)
-    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
 
 class SuccessfulPatch(Base):
@@ -216,7 +217,7 @@ class SuccessfulPatch(Base):
     patch_content = Column(Text, nullable=False)
     files_changed = Column(JSON, default=list)
     success_rate = Column(Float, default=1.0)
-    created_at = Column(DateTime, default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     ticket = relationship("Ticket")
 
@@ -229,8 +230,8 @@ class Session(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(50), nullable=False, default="pending")  # pending, running, paused, completed, stopped
     trigger_type = Column(String(50), nullable=False, default="manual")  # manual, cron
-    started_at = Column(DateTime)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
     
     # Progress tracking
     total_tickets_found = Column(Integer, default=0)
@@ -245,7 +246,7 @@ class Session(Base):
     auto_close_github_issues = Column(Boolean, default=True)
     max_concurrent_tickets = Column(Integer, default=1)  # For future parallel processing
     
-    created_at = Column(DateTime, default=now_utc)
-    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     project = relationship("Project")

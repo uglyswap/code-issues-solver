@@ -1,10 +1,12 @@
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional, Dict
 
 import dramatiq
 from dramatiq import middleware
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 
 from workers.app.broker import broker
 from workers.app.session_worker import run_continuous_session  # Register the actor
@@ -25,10 +27,14 @@ def _get_session_factory():
     global _engine, _async_session_factory
     if _async_session_factory is None:
         from backend.app.config import settings
+        # NullPool: chaque acteur Dramatiq tourne dans son propre asyncio.run() (event loop distinct).
+        # Un pool persistant conserverait des connexions liees a un loop deja ferme, provoquant
+        # "got Future attached to a different loop". NullPool ouvre/ferme une connexion par usage.
         _engine = create_async_engine(
             settings.database_url,
             echo=False,
             future=True,
+            poolclass=NullPool,
         )
         _async_session_factory = async_sessionmaker(
             _engine,
@@ -38,8 +44,22 @@ def _get_session_factory():
     return _async_session_factory
 
 
-def get_db():
-    return _get_session_factory()()
+@asynccontextmanager
+async def get_db():
+    """Session DB worker: commit en sortie de bloc, rollback sur exception.
+
+    Sans ce commit explicite, AsyncSession ferme le contexte sans persister:
+    toutes les ecritures (TestSession, tickets, statuts, logs) etaient perdues.
+    """
+    session = _get_session_factory()()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
 
 
 async def _log(execution_id: int, level: str, message: str):
@@ -134,12 +154,13 @@ async def _detect_bugs(db: AsyncSession, execution_id: int, test_data: dict):
         return
 
     # Use tester agent if available
+    agent = None
     try:
         agent = await get_agent_by_name(db, "tester")
         bugs = await agent.run_json({
             "console_logs": test_data["console_logs"],
             "network_requests": test_data["network_requests"],
-            "broken_elements": test_data["broken_elements"],
+            "broken_elements": test_data.get("broken_elements", []),
             "pages_visited": test_data["pages_visited"],
         })
         if not isinstance(bugs, list):
@@ -147,8 +168,16 @@ async def _detect_bugs(db: AsyncSession, execution_id: int, test_data: dict):
     except Exception:
         # Fallback to rule-based detection
         bugs = _rule_based_detect(test_data)
+    finally:
+        # CONC-02/LLM-02: fermer le client httpx de l'agent
+        if agent is not None:
+            try:
+                await agent.client.close()
+            except Exception:
+                pass
 
     total = 0
+    new_ticket_ids = []
     for bug in bugs:
         if bug.get("false_positive"):
             continue
@@ -162,11 +191,15 @@ async def _detect_bugs(db: AsyncSession, execution_id: int, test_data: dict):
             console_logs=bug.get("evidence"),
         )
         db_ticket = await crud.create_ticket(db, ticket)
-        create_github_issue.send(db_ticket.id)
+        new_ticket_ids.append(db_ticket.id)
 
     execution.total_bugs_found = total
     await db.flush()
-    await db.refresh(execution)
+    # Commit avant d'enfiler les messages: garantit que les autres workers voient
+    # les tickets en base au moment de traiter create_github_issue (evite la race send/commit).
+    await db.commit()
+    for tid in new_ticket_ids:
+        create_github_issue.send(tid)
 
 
 def _rule_based_detect(test_data: dict):
@@ -241,6 +274,7 @@ async def _create_github_issue_async(ticket_id: int):
             ticket.github_issue_url = issue.get("html_url")
             await db.flush()
             await db.refresh(ticket)
+            await db.commit()  # persister avant d'enfiler generate_patch (autre worker)
             generate_patch.send(ticket_id)
         except Exception as e:
             await _log(execution.id, "error", f"Failed to create GitHub issue: {e}")
@@ -348,10 +382,17 @@ async def _generate_patch_async(ticket_id: int, attempt: int = 1, feedback: str 
             
             # Generate patch with coder agent
             agent = await get_agent_by_name(db, "coder")
-            patch_text = await agent.run({
-                "bug_description": bug_description,
-                "code_files": code_files,
-            })
+            try:
+                patch_text = await agent.run({
+                    "bug_description": bug_description,
+                    "code_files": code_files,
+                })
+            finally:
+                # CONC-02/LLM-02: fermer le client httpx de l'agent (sinon fuite de connexions)
+                try:
+                    await agent.client.close()
+                except Exception:
+                    pass
             ticket.patch_content = patch_text
             await db.flush()
             await db.refresh(ticket)
@@ -381,6 +422,7 @@ async def _generate_patch_async(ticket_id: int, attempt: int = 1, feedback: str 
                     }, attempt)
                     
                     # Retry with feedback
+                    await db.commit()
                     generate_patch.send(ticket_id, attempt + 1, test_feedback)
                     return
                 else:
@@ -390,12 +432,19 @@ async def _generate_patch_async(ticket_id: int, attempt: int = 1, feedback: str 
                     return
             
             await _log(execution.id, "info", "Automatic tests passed, proceeding to review...")
-            
-            # Proceed to review
+
+            # Proceed to review (commit pour que review_patch voie patch_content)
+            await db.commit()
             review_patch.send(ticket_id, attempt)
-            
+
         except Exception as e:
             await _log(execution.id, "error", f"Patch generation failed: {e}")
+            # WORK-07: ne pas laisser le ticket bloque en statut transitoire 'patching'
+            try:
+                ticket.status = "failed"
+                await db.flush()
+            except Exception:
+                pass
         finally:
             await client.close()
 
@@ -417,27 +466,37 @@ async def _run_automatic_tests(
     from pathlib import Path
     from workers.app.test_runner import TestRunner
     
+    # WORK-04/SEC-06: masquer le token dans toute sortie (stderr) qui finit en logs DB / prompt LLM
+    def _redact(text: str) -> str:
+        if not text:
+            return text
+        return text.replace(token, "***").replace("x-access-token:***", "x-access-token:***")
+
     # Create a temporary directory
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_repo = Path(tmpdir) / "repo"
-        
+
         try:
             # Clone the repo
             import subprocess
+            import os as _os
+            clone_env = {**_os.environ, "GIT_TERMINAL_PROMPT": "0"}
             proc = subprocess.run(
-                ["git", "clone", f"https://x-access-token:{token}@github.com/{repo_owner}/{repo_name}.git", str(tmp_repo)],
+                ["git", "clone", "--depth", "1",
+                 f"https://x-access-token:{token}@github.com/{repo_owner}/{repo_name}.git", str(tmp_repo)],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
+                env=clone_env,
             )
-            
+
             if proc.returncode != 0:
                 return {
                     "success": False,
                     "tests_run": 0,
                     "tests_passed": 0,
                     "tests_failed": 0,
-                    "errors": [f"Failed to clone repo: {proc.stderr}"]
+                    "errors": [f"Failed to clone repo: {_redact(proc.stderr)}"]
                 }
             
             # Apply the patch
@@ -458,7 +517,7 @@ async def _run_automatic_tests(
                     "tests_run": 0,
                     "tests_passed": 0,
                     "tests_failed": 0,
-                    "errors": [f"Failed to apply patch: {proc.stderr}"]
+                    "errors": [f"Failed to apply patch: {_redact(proc.stderr)}"]
                 }
             
             # Install dependencies if needed
@@ -480,7 +539,7 @@ async def _run_automatic_tests(
                 "tests_run": 0,
                 "tests_passed": 0,
                 "tests_failed": 0,
-                "errors": [f"Test runner failed: {str(e)}"]
+                "errors": [f"Test runner failed: {_redact(str(e))}"]
             }
 
 
@@ -509,16 +568,23 @@ async def _review_patch_async(ticket_id: int, attempt: int = 1):
             
             # Get reviewer agent
             reviewer = await get_agent_by_name(db, "reviewer")
-            
+
             # Prepare review input
             review_input = {
                 "bug_description": ticket.description,
                 "patch_content": ticket.patch_content,
                 "attempt": attempt,
             }
-            
+
             # Run review
-            review_result = await reviewer.run_json(review_input)
+            try:
+                review_result = await reviewer.run_json(review_input)
+            finally:
+                # CONC-02/LLM-02: fermer le client httpx de l'agent
+                try:
+                    await reviewer.client.close()
+                except Exception:
+                    pass
             
             # Check if approved
             review_status = review_result.get("review_status", "rejected")
@@ -627,23 +693,31 @@ async def _trigger_deployment_async(ticket_id: int):
         await _log(execution.id, "info", f"Deployment triggered for ticket {ticket_id}")
 
         if project.deploy_webhook_url:
-            import httpx
+            # SEC-04/WORK-12: valider l'URL avant POST sortant (anti-SSRF)
+            from backend.app.utils import validate_url_no_ssrf
             try:
-                async with httpx.AsyncClient() as client:
-                    await client.post(
-                        project.deploy_webhook_url,
-                        json={
-                            "ticket_id": ticket_id,
-                            "pr_number": ticket.github_pr_number,
-                            "commit_sha": ticket.patch_commit_sha,
-                        },
-                        timeout=30.0,
-                    )
-            except Exception as e:
-                await _log(execution.id, "error", f"Webhook deployment failed: {e}")
+                validate_url_no_ssrf(project.deploy_webhook_url)
+            except ValueError as e:
+                await _log(execution.id, "error", f"deploy_webhook_url rejete (SSRF): {e}")
+            else:
+                import httpx
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            project.deploy_webhook_url,
+                            json={
+                                "ticket_id": ticket_id,
+                                "pr_number": ticket.github_pr_number,
+                                "commit_sha": ticket.patch_commit_sha,
+                            },
+                            timeout=30.0,
+                        )
+                except Exception as e:
+                    await _log(execution.id, "error", f"Webhook deployment failed: {e}")
 
         ticket.status = "deployed"
         await db.flush()
+        await db.commit()  # persister avant d'enfiler verify_fix (autre worker)
         verify_fix.send(ticket_id)
 
 
@@ -724,11 +798,12 @@ async def _verify_fix_async(ticket_id: int):
                     await crud.create_successful_patch(
                         db,
                         schemas.SuccessfulPatchCreate(
-                            pattern_id=f"ticket_{ticket.id}",
+                            ticket_id=ticket.id,
                             category=ticket.category or "unknown",
+                            title=ticket.title or f"Patch for ticket {ticket.id}",
                             description=ticket.description or "",
                             patch_content=ticket.patch_content or "",
-                            files_affected=files_changed,
+                            files_changed=files_changed,
                             success_rate=1.0,
                         )
                     )
@@ -741,6 +816,7 @@ async def _verify_fix_async(ticket_id: int):
                 ticket.status = "open"
                 ticket.retry_count += 1
                 await db.flush()
+                await db.commit()  # persister le nouveau statut/retry avant de re-enfiler
                 await _log(execution.id, "warning", f"Ticket {ticket_id} not fixed, retrying ({ticket.retry_count}/{ticket.max_retries})")
                 generate_patch.send(ticket_id)
             else:

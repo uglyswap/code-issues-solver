@@ -10,18 +10,23 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
   const { data: projectsData } = useQuery({ queryKey: ['projects'], queryFn: () => projectsApi.list().then((r) => r.data) })
-  const { data, isLoading } = useQuery({ queryKey: ['tickets', projectId, statusFilter, severityFilter], queryFn: () => { const pid = projectId || projectsData?.items?.[0]?.id; if (!pid) return { items: [] }; return ticketsApi.list(pid, { page: 1, per_page: 50, status: statusFilter || undefined, severity: severityFilter || undefined }).then((r) => r.data) }, enabled: !!projectsData })
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['tickets', projectId, statusFilter, severityFilter], queryFn: () => { const pid = projectId || projectsData?.items?.[0]?.id; if (!pid) return { items: [] }; return ticketsApi.list(pid, { page: 1, per_page: 50, status: statusFilter || undefined, severity: severityFilter || undefined }).then((r) => r.data) }, enabled: !!projectsData })
   const tickets: Ticket[] = data?.items || []
   const projects: Project[] = projectsData?.items || []
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold">Tickets</h1>
-        <select className="border rounded-lg px-3 py-2" value={projectId} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : '')}><option value="">All Projects</option>{projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
-        <select className="border rounded-lg px-3 py-2" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All Statuses</option><option value="open">Open</option><option value="patched">Patched</option><option value="pr_open">PR Open</option><option value="merged">Merged</option><option value="deployed">Deployed</option><option value="verified">Verified</option><option value="failed">Failed</option><option value="ignored">Ignored</option></select>
-        <select className="border rounded-lg px-3 py-2" value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}><option value="">All Severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        <select aria-label="Filter by project" className="border rounded-lg px-3 py-2" value={projectId} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : '')}><option value="">All Projects</option>{projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
+        <select aria-label="Filter by status" className="border rounded-lg px-3 py-2" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All Statuses</option><option value="open">Open</option><option value="patched">Patched</option><option value="pr_open">PR Open</option><option value="merged">Merged</option><option value="deployed">Deployed</option><option value="verified">Verified</option><option value="failed">Failed</option><option value="ignored">Ignored</option></select>
+        <select aria-label="Filter by severity" className="border rounded-lg px-3 py-2" value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}><option value="">All Severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
       </div>
-      {isLoading ? (<div className="flex justify-center"><Loader2 className="animate-spin w-6 h-6" /></div>) : (
+      {isLoading ? (<div className="flex justify-center"><Loader2 className="animate-spin w-6 h-6" /></div>) : isError ? (
+        <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <p className="text-red-700 mb-3">Failed to load tickets</p>
+          <button onClick={() => refetch()} className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">Retry</button>
+        </div>
+      ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {tickets.map((ticket) => (
             <div key={ticket.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">

@@ -48,6 +48,12 @@ async def update_ticket(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_active_user),
 ):
+    ALLOWED_STATUSES = {
+        "open", "patching", "reviewing", "testing", "creating_pr", "pr_open",
+        "deploying", "deployed", "verifying", "verified", "merged", "failed", "ignored",
+    }
+    if ticket.status is not None and ticket.status not in ALLOWED_STATUSES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {ticket.status}")
     if ticket.status == "ignored" and not ticket.ignored_reason:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ignored_reason is required when status is ignored")
     db_ticket = await crud.update_ticket(db, ticket_id, ticket)
@@ -65,6 +71,12 @@ async def retry_ticket(
     db_ticket = await crud.get_ticket(db, ticket_id)
     if not db_ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    # ROUTERS-14: ne pas autoriser un retry au-dela de max_retries (boucle infinie sinon)
+    if db_ticket.retry_count >= (db_ticket.max_retries or 0):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Max retries reached ({db_ticket.retry_count}/{db_ticket.max_retries})",
+        )
     db_ticket.retry_count += 1
     db_ticket.status = "open"
     await db.flush()

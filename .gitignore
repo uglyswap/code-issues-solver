@@ -20,6 +20,13 @@ dist/
 # Env
 .env
 .env.local
+.env.*
+!.env.example
+
+# Secrets / keys
+*.pem
+id_rsa*
+*.key
 
 # IDE
 .vscode/

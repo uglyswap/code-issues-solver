@@ -1,7 +1,7 @@
 .PHONY: install dev backend workers ui test lint migrate seed docker-up docker-down
 
 install:
-	pip install -r requirements.txt
+	pip install -r requirements-dev.txt
 	cd ui && npm install
 
 dev:

@@ -6,6 +6,7 @@ from backend.app import schemas, crud
 from backend.app.database import get_db
 from backend.app.dependencies import get_current_active_user
 from backend.app.security import decrypt_value
+from backend.app.utils import validate_url_no_ssrf
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
@@ -79,7 +80,13 @@ async def test_provider(
     db_provider = await crud.get_ai_provider(db, provider_id)
     if not db_provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
-    
+
+    # Validate URL to prevent SSRF (outside the try so the rejection is not swallowed)
+    try:
+        validate_url_no_ssrf(db_provider.base_url)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     try:
         # Decrypt API key
         api_key = decrypt_value(db_provider.api_key_encrypted)
@@ -196,27 +203,27 @@ async def list_provider_models(
     db_provider = await crud.get_ai_provider(db, provider_id)
     if not db_provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
-    
+
+    # Validate URL to prevent SSRF (outside the try so the rejection is not swallowed)
     try:
-        api_key = decrypt_value(db_provider.api_key_encrypted)
-        base_url = db_provider.base_url.rstrip("/")
-        provider_type = detect_provider_type(base_url)
-        
-        # Try to fetch models from the API
-        models_url = f"{base_url}/models"
-        
-    # Validate URL to prevent SSRF
-    from backend.app.utils import validate_url_no_ssrf
-    try:
-        validate_url_no_ssrf(provider.base_url)
+        validate_url_no_ssrf(db_provider.base_url)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    api_key = decrypt_value(db_provider.api_key_encrypted)
+    base_url = db_provider.base_url.rstrip("/")
+    provider_type = detect_provider_type(base_url)
+    models_url = f"{base_url}/models"
+    response = None
+
+    try:
+        # Try to fetch models from the API
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(
                 models_url,
                 headers={"Authorization": f"Bearer {api_key}"},
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 # OpenAI-compatible format: {"data": [{"id": "model-name", ...}]}
@@ -235,7 +242,7 @@ async def list_provider_models(
                         "models": model_ids,
                         "source": "api",
                     }
-        
+
         # Fallback to hardcoded lists
         if provider_type in FALLBACK_MODELS:
             return {

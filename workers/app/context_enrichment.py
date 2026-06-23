@@ -22,7 +22,8 @@ def extract_imports(file_content: str, file_path: str) -> List[str]:
                 elif isinstance(node, ast.ImportFrom):
                     if node.module:
                         imports.append(node.module)
-        except:
+        except SyntaxError:
+            # fichier non parsable (ex: code partiel/non Python valide): on ignore les imports
             pass
     
     # TypeScript/JavaScript imports

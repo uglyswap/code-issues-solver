@@ -195,12 +195,15 @@ class ConnectionManager:
                 del self.active_connections[session_id]
     
     async def send_personal_message(self, message: dict, session_id: int):
-        if session_id in self.active_connections:
-            for connection in self.active_connections[session_id]:
-                try:
-                    await connection.send_json(message)
-                except:
-                    pass  # Connection closed
+        # Iterer sur une COPIE: une deconnexion concurrente peut muter la liste pendant l'await.
+        dead = []
+        for connection in list(self.active_connections.get(session_id, [])):
+            try:
+                await connection.send_json(message)
+            except Exception:
+                dead.append(connection)  # connexion morte: a retirer
+        for connection in dead:
+            self.disconnect(session_id, connection)
     
     async def broadcast(self, message: dict, session_id: int):
         await self.send_personal_message(message, session_id)
@@ -218,16 +221,36 @@ async def session_websocket(
     """WebSocket for real-time session logs. Requires JWT token in query string."""
     # Validate JWT token
     from backend.app.security import decode_access_token
+    from backend.app.database import async_session
     payload = decode_access_token(token)
     if not payload:
         await websocket.close(code=4001, reason="Invalid or expired token")
         return
-    
+
     user_id = payload.get("sub")
     if not user_id:
         await websocket.close(code=4001, reason="Invalid token payload")
         return
-    
+
+    # CONC-16/SEC-18: re-valider l'utilisateur (existe + actif) et l'existence de la session,
+    # via une session DB courte (pas de connexion tenue pendant toute la duree du WebSocket).
+    try:
+        async with async_session() as db:
+            try:
+                user = await crud.get_user_by_id(db, int(user_id))
+            except (TypeError, ValueError):
+                user = None
+            if not user or not user.is_active:
+                await websocket.close(code=4003, reason="User not found or inactive")
+                return
+            db_session = await db.get(models.Session, session_id)
+            if not db_session:
+                await websocket.close(code=4004, reason="Session not found")
+                return
+    except Exception:
+        await websocket.close(code=1011, reason="Internal error")
+        return
+
     await manager.connect(session_id, websocket)
     try:
         while True:

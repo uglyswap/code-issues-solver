@@ -33,8 +33,9 @@ RUN chown -R appuser:appuser /app
 
 EXPOSE 8000
 
+# Le router health est inclus sans prefix (main.py), le endpoint reel est /health.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 USER appuser
 

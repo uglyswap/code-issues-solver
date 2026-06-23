@@ -21,6 +21,11 @@ def create_llm_client(provider: models.AIProvider) -> BaseLLMClient:
     api_key = decrypt_value(provider.api_key_encrypted)
     if "openrouter" in provider.name.lower():
         return OpenRouterClient(api_key)
+    # Fallback: si le nom ne matche pas mais que base_url pointe vers OpenRouter,
+    # utiliser quand meme OpenRouterClient (routage plus robuste, retrocompatible).
+    base_url = provider.base_url or ""
+    if "openrouter" in base_url.lower():
+        return OpenRouterClient(api_key)
     return AlibabaCloudClient(api_key, provider.base_url)
 
 

@@ -18,13 +18,11 @@ async def get_dashboard_stats(
     current_user=Depends(get_current_active_user),
 ):
     """Get global dashboard statistics."""
-    # Base query
-    query = select(models.Ticket)
+    # Total tickets (respecte le filtre project_id pour rester coherent avec les agregats ci-dessous)
+    total_query = select(func.count(models.Ticket.id))
     if project_id:
-        query = query.join(models.Execution).where(models.Execution.project_id == project_id)
-    
-    # Total tickets
-    total_result = await db.execute(select(func.count(models.Ticket.id)))
+        total_query = total_query.join(models.Execution).where(models.Execution.project_id == project_id)
+    total_result = await db.execute(total_query)
     total_tickets = total_result.scalar() or 0
     
     # Tickets by status

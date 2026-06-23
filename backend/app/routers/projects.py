@@ -140,9 +140,11 @@ async def test_app_connection(
                         "username": db_project.app_username,
                         "password": password
                     }
+                    # follow_redirects=False: ne pas reposter les identifiants vers une URL de redirection (exfiltration)
                     login_response = await client.post(
                         f"{db_project.app_url}/login",
-                        data=login_data
+                        data=login_data,
+                        follow_redirects=False,
                     )
                     result["login_tested"] = True
                     result["login_status"] = login_response.status_code

@@ -33,7 +33,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    # Auth via header Authorization: Bearer (pas de cookies), donc credentials inutiles.
+    # allow_credentials=False ferme la classe de risque CORS+credentials.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

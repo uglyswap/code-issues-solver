@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { authApi } from '../services/api'
+import { queryClient } from '../lib/query-client'
 import type { User } from '../types'
 
 interface AuthContextType {
@@ -47,6 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem('token')
+    // Clear react-query cache to avoid leaking one account's cached data to another.
+    queryClient.clear()
     setUser(null)
   }
 

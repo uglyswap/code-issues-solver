@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, func, desc, case
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 
 from workers.app.broker import broker
 from backend.app import models, crud
@@ -16,7 +17,12 @@ from backend.app.security import decrypt_value
 from integrations.app.github_client import GitHubClient
 
 
-@dramatiq.actor(max_retries=0)
+# WORK-02: la session continue est concue pour tourner longtemps (potentiellement des heures).
+# Le TimeLimit Dramatiq par defaut (10 min) la tuerait. On releve la limite a 7 jours.
+_SESSION_TIME_LIMIT_MS = 7 * 24 * 60 * 60 * 1000
+
+
+@dramatiq.actor(max_retries=0, time_limit=_SESSION_TIME_LIMIT_MS)
 def run_continuous_session(session_id: int):
     """Run a continuous correction session until all tickets are resolved."""
     asyncio.run(_run_continuous_session_async(session_id))
@@ -31,10 +37,12 @@ def _get_session_factory():
     global _engine, _async_session_factory
     if _async_session_factory is None:
         from backend.app.config import settings
+        # NullPool: evite de reutiliser des connexions liees a un event loop ferme entre messages.
         _engine = create_async_engine(
             settings.database_url,
             echo=False,
             future=True,
+            poolclass=NullPool,
         )
         _async_session_factory = async_sessionmaker(
             _engine,
@@ -281,8 +289,15 @@ async def _create_pr_sync(db, ticket_id: int, project: models.Project):
 async def _deploy_sync(db, ticket_id: int, project: models.Project):
     """Deploy synchronously."""
     import httpx
+    from backend.app.utils import validate_url_no_ssrf
     ticket = await db.get(models.Ticket, ticket_id)
     if project.deploy_webhook_url and ticket:
+        # SEC-04: valider l'URL avant POST sortant (anti-SSRF)
+        try:
+            validate_url_no_ssrf(project.deploy_webhook_url)
+        except ValueError as e:
+            print(f"[deploy] deploy_webhook_url rejete (SSRF) pour ticket {ticket_id}: {e}")
+            return
         async with httpx.AsyncClient() as client:
             await client.post(
                 project.deploy_webhook_url,

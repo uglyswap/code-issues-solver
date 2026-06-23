@@ -21,6 +21,7 @@ For each bug:
 Return a JSON array of the triaged bugs with fields: title, description, severity, category, false_positive, reasoning.
 """
 
+# NOTE: contrat de sortie a aligner avec agents/prompts/coder.md
 CODER_PROMPT = """
 You are an expert developer. Fix the bug described below by generating a unified diff patch.
 Rules:

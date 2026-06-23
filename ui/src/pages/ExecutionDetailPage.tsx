@@ -8,17 +8,29 @@ export default function ExecutionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const executionId = Number(id)
   const [logs, setLogs] = useState<Array<Record<string, unknown>>>([])
+  const [streamDisconnected, setStreamDisconnected] = useState(false)
+  const logsContainerRef = useRef<HTMLDivElement>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const { data, isLoading } = useQuery({ queryKey: ['execution', executionId], queryFn: () => executionsApi.get(executionId).then((r) => r.data) })
   useEffect(() => {
+    // Reset log state when the execution id changes so logs from a previous execution are not mixed in.
+    setLogs([])
+    setStreamDisconnected(false)
     const url = executionsApi.logs(executionId)
     const token = localStorage.getItem('token')
+    // SECURITY: JWT en query string, a remplacer par un token ephemere SSE cote backend
     const evtSource = new EventSource(`${url}?token=${token || ''}`, { withCredentials: false })
     evtSource.onmessage = (event) => { try { const parsed = JSON.parse(event.data); if (parsed.message === 'Stream ended') { evtSource.close(); return }; setLogs((prev) => [...prev, parsed]) } catch {} }
-    evtSource.onerror = () => { evtSource.close() }
+    evtSource.onerror = () => { setStreamDisconnected(true); evtSource.close() }
     return () => evtSource.close()
   }, [executionId])
-  useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs])
+  useEffect(() => {
+    const container = logsContainerRef.current
+    if (!container) return
+    // Only auto-scroll when the user is already at (or near) the bottom of the log view.
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40
+    if (isAtBottom) logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs])
   const execution = data
   if (isLoading || !execution) return <div className="flex justify-center"><Loader2 className="animate-spin w-6 h-6" /></div>
   return (
@@ -35,7 +47,16 @@ export default function ExecutionDetailPage() {
       </div>
       <div>
         <h2 className="text-lg font-semibold mb-2">Live Logs</h2>
-        <div className="bg-slate-900 text-slate-100 p-4 rounded-xl h-96 overflow-y-auto font-mono text-sm space-y-1">
+        {streamDisconnected && (
+          <div role="status" className="mb-2 text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">Log stream disconnected</div>
+        )}
+        <div
+          ref={logsContainerRef}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          className="bg-slate-900 text-slate-100 p-4 rounded-xl h-96 overflow-y-auto font-mono text-sm space-y-1"
+        >
           {logs.map((log, i) => (<div key={i} className={`${log.level === 'error' ? 'text-red-400' : log.level === 'warning' ? 'text-yellow-400' : 'text-slate-300'}`}><span className="text-slate-500 text-xs mr-2">{String(log.timestamp || '').split('.')[0]}</span><span className="font-bold uppercase text-xs mr-2">{String(log.level)}</span>{String(log.message)}</div>))}
           <div ref={logsEndRef} />
         </div>

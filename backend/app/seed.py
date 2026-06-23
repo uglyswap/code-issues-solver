@@ -1,5 +1,6 @@
 import asyncio
 import os
+import secrets as _secrets
 from pathlib import Path
 from backend.app.database import async_session
 from backend.app import crud, schemas
@@ -10,9 +11,24 @@ async def seed():
         # Create default admin user if not exists
         user = await crud.get_user_by_username(db, "admin")
         if not user:
-            await crud.create_user(db, schemas.UserCreate(username="admin", email="admin@local", password="admin1234"))
+            # BACK-05/SEC-02: ne jamais coder en dur ni logger le mot de passe admin.
+            # Priorite a ADMIN_PASSWORD (env). Sinon, generer un mot de passe aleatoire et l'afficher
+            # UNE fois pour permettre le premier login (a changer ensuite).
+            admin_password = os.environ.get("ADMIN_PASSWORD")
+            generated = False
+            if not admin_password:
+                admin_password = _secrets.token_urlsafe(16)
+                generated = True
+            admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
+            await crud.create_user(
+                db,
+                schemas.UserCreate(username="admin", email=admin_email, password=admin_password),
+            )
             await db.commit()
-            print("Created admin user (admin / admin1234)")
+            if generated:
+                print(f"Created admin user 'admin'. Generated password (change it now): {admin_password}")
+            else:
+                print("Created admin user 'admin' with password from ADMIN_PASSWORD env.")
 
         # Create default providers if none exist
         providers = await crud.get_ai_providers(db, limit=1)
