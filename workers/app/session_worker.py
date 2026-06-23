@@ -5,7 +5,7 @@ No time limit - keeps going until done.
 """
 import asyncio
 import dramatiq
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, func, desc, case
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -66,7 +66,7 @@ async def _run_continuous_session_async(session_id: int):
         
         # Mark session as running
         session.status = "running"
-        session.started_at = datetime.utcnow()
+        session.started_at = datetime.now(timezone.utc)
         await db.commit()
         
         project = await crud.get_project(db, session.project_id)
@@ -101,7 +101,7 @@ async def _run_continuous_session_async(session_id: int):
                 if not in_progress:
                     await _session_log(db, session_id, "info", f"All tickets resolved! Session completed after {iteration} iterations")
                     session.status = "completed"
-                    session.completed_at = datetime.utcnow()
+                    session.completed_at = datetime.now(timezone.utc)
                     await db.commit()
                     break
                 else:
@@ -176,7 +176,7 @@ async def _get_in_progress_tickets(db, project_id: int) -> list[models.Ticket]:
 
 async def _process_ticket(db, session_id: int, ticket: models.Ticket, project: models.Project) -> bool:
     """Process a single ticket through the full pipeline."""
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
     
     try:
         await _session_log(db, session_id, "info", f"Generating patch for ticket #{ticket.id}", ticket.id)
@@ -239,7 +239,7 @@ async def _process_ticket(db, session_id: int, ticket: models.Ticket, project: m
         
         await db.refresh(ticket)
         
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         ticket.resolution_time_seconds = (end_time - start_time).total_seconds()
         
         if verified:
@@ -311,7 +311,7 @@ async def _session_log(db, session_id: int, level: str, message: str, ticket_id:
     
     logs = session.logs or []
     logs.append({
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "level": level,
         "message": message,
         "ticket_id": ticket_id,
