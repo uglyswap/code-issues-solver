@@ -41,11 +41,11 @@ Relevant code context:
 REVIEWER_PROMPT = """
 You are an expert code reviewer. Review the following patch for correctness, edge cases, performance, and security.
 Provide:
-- decision: approve or request_changes
+- review_status: "approved" or "rejected"
 - comments: list of specific comments with file/line references
 - summary: brief summary
 
-Return JSON with fields: decision, comments (array of {file, line, message}), summary.
+Return JSON with fields: review_status, comments (array of {file, line, message}), summary.
 """
 
 VERIFIER_PROMPT = """
