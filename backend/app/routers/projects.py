@@ -112,6 +112,13 @@ async def test_app_connection(
     if not db_project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     
+    # Validate URL to prevent SSRF
+    from backend.app.utils import validate_url_no_ssrf
+    try:
+        validate_url_no_ssrf(db_project.app_url)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             # Test basic access
