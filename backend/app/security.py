@@ -1,4 +1,5 @@
 import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -11,8 +12,9 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def get_fernet() -> Fernet:
-    key = base64.urlsafe_b64encode(settings.get_encryption_key_bytes()[:32].ljust(32, b'0'))
-    return Fernet(key)
+    """Derive Fernet key using SHA-256 for proper cryptographic key derivation."""
+    key = hashlib.sha256(settings.encryption_key.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
 
 
 def encrypt_value(value: str) -> str:
