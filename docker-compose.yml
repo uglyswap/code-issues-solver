@@ -5,29 +5,69 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: app
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-change...s:17
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: code_issues_solver
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d code_issues_solver"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
 
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://app:${DB_PASSWORD:-change...n
+      DATABASE_URL: postgresql+asyncpg://app:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/code_issues_solver
+      REDIS_URL: redis://redis:***@postgres:5432/code_issues_solver
       REDIS_URL: redis://redis:6379/0
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-base64encoded32byteskey==}
-      CORS_ORIGINS: '["http://localhost:3501","http://207.180.243.246:3501"]'
-      LOG_LEVEL: INFO
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r = redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
     deploy:
-      replicas: 2
-    volumes:
-      - ./screenshots:/app/screenshots
-      - ./videos:/app/videos
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
 
   ui:
     build:
@@ -36,9 +76,22 @@ services:
     ports:
       - "3501:3000"
     environment:
-      VITE_API_URL: http://207.180.243.246:3500
+      VITE_API_URL: ${API_URL:-http://localhost:3500}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.5'
 
   nginx:
     build:
@@ -47,8 +100,23 @@ services:
     ports:
       - "3500:3500"
     depends_on:
-      - backend
-      - ui
+      backend:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3500/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.25'
 
 volumes:
   postgres_data:
+  redis_data:

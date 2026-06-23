@@ -1,19 +1,39 @@
-from pydantic_settings import BaseSettings
-from pydantic import Field
-from typing import List
-import os
+name: CI
 
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
 
-class Settings(BaseSettings):
-    database_url: str = Field(default="postgresql+asyncpg://app:change...n")
-    redis_url: str = Field(default="redis://localhost:***@v4
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install ruff black mypy
-      - run: ruff check backend/ workers/ browser/ agents/ integrations/
-      - run: black --check backend/ workers/ browser/ agents/ integrations/
-      - run: cd ui && npm ci && npm run lint && npm run type-check
+          cache: 'pip'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install Python dependencies
+        run: pip install ruff black mypy
+
+      - name: Ruff lint
+        run: ruff check backend/ workers/ browser/ agents/ integrations/
+
+      - name: Black format check
+        run: black --check backend/ workers/ browser/ agents/ integrations/
+
+      - name: UI lint and type-check
+        run: cd ui && npm ci && npm run lint && npm run type-check
 
   test:
     runs-on: ubuntu-latest
@@ -37,29 +57,70 @@ class Settings(BaseSettings):
           - 6379:6379
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: pytest tests/ --cov=backend --cov=workers --cov=browser --cov=agents --cov=integrations --cov-report=xml --cov-fail-under=80
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ --cov=backend --cov=workers --cov=browser --cov=agents --cov=integrations --cov-report=xml --cov-fail-under=80
+
       - uses: codecov/codecov-action@v3
 
   e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker-compose up -d --build
-      - run: cd tests/e2e && npx playwright install chromium && npx playwright test
-      - run: docker-compose down
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tests/e2e/package-lock.json
+
+      - name: Build and start services
+        run: docker-compose up -d --build
+
+      - name: Install Playwright browsers
+        run: cd tests/e2e && npx playwright install chromium
+
+      - name: Run E2E tests
+        run: cd tests/e2e && npx playwright test
+
+      - name: Tear down services
+        run: docker-compose down
 
   security:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install bandit safety detect-secrets
-      - run: bandit -r backend/ -ll
-      - run: safety check
-      - run: detect-secrets scan backend/ > .secrets.baseline
+          cache: 'pip'
+
+      - name: Install security tools
+        run: pip install bandit safety detect-secrets pip-audit
+
+      - name: Bandit security lint
+        run: bandit -r backend/ workers/ browser/ agents/ integrations/ -ll --severity-level medium
+
+      - name: Safety check (known vulnerabilities)
+        run: safety check --full-report
+
+      - name: Pip audit
+        run: pip-audit
+
+      - name: Detect secrets scan
+        run: detect-secrets scan backend/ workers/ > .secrets.baseline
+
+      - name: Upload secrets baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: secrets-baseline
+          path: .secrets.baseline
