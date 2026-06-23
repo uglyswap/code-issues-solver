@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -23,4 +26,12 @@ COPY db ./db
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-CMD ["dramatiq", "workers.app.tasks", "-p", "2", "--watch", "/app"]
+# Fix ownership for non-root user
+RUN chown -R appuser:appuser /app
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import redis, os; r = redis.from_url(os.environ.get('REDIS_URL', 'redis://redis:6379/0')); r.ping()" || exit 1
+
+USER appuser
+
+CMD ["dramatiq", "workers.app.tasks", "-p", "2"]
